@@ -1,0 +1,23 @@
+{
+  "name": "smart-schedule-",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+   "dev":"nodemon server/src/index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Renadyousef/Smart-schedule-.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Renadyousef/Smart-schedule-/issues"
+  },
+  "homepage": "https://github.com/Renadyousef/Smart-schedule-#readme",
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
