@@ -7,7 +7,7 @@ export default function AuthNav() {
             src="/Logo.png"
             alt="Logo"
             width=""
-            height="50"
+            height="55"
             className="d-inline-block align-text-top"
           />
          
