@@ -1,10 +1,11 @@
 const pool=require('../DataBase_config/DB_config')
 const express = require('express');
+const cors = require('cors'); // for incoming react req
 const app = express();
 
 // Middlewares
 app.use(express.json());
-
+app.use(cors());
 // use routes here
 
 //testing DB connection
