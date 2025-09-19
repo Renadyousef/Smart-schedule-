@@ -1,7 +1,7 @@
 export default function SignUp() {
   return (
-    <form className="p-4 border rounded shadow-sm bg-light">
-      <h3 className="mb-4 text-center">Sign Up</h3>
+    <form className="p-4">
+     
  {/* First & Last Name */}
       <div className="mb-3">
         <label htmlFor="firstName" className="form-label">
