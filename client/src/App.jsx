@@ -1,9 +1,9 @@
 import './App.css'
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
-
+import AuthPage from './components/Auth/AuthPage';
 function App() {
- return <h1>Welocme to smart schdule</h1>
+ return <AuthPage/>
    
 }
 
