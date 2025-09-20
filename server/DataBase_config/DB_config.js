@@ -1,9 +1,9 @@
-//DB_config file
-const { Pool } = require('pg');
+import pkg from 'pg'; // ES module import for pg
+const { Pool } = pkg;
 
 const pool = new Pool({
   connectionString: 'postgresql://postgres:Ela@911911@db.rezcixrdprtvpfkvbaxw.supabase.co:5432/postgres',
   ssl: { rejectUnauthorized: false }, // needed for Supabase
 });
 
-module.exports = pool;
+export default pool;

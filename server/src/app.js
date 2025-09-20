@@ -1,18 +1,17 @@
-const pool=require('../DataBase_config/DB_config')
-const express = require('express');
-const cors = require('cors'); // for incoming react req
+// ES module imports
+import pool from '../DataBase_config/DB_config.js'; // include .js
+import express from 'express';
+import cors from 'cors';
+//import ur routes
+import authRoutes from './routes/Authroute.js'; // include .js
+
 const app = express();
 
 // Middlewares
 app.use(express.json());
 app.use(cors());
-// use routes here
 
-//testing DB connection
-pool.query('SELECT NOW()', (err, res) => {
-  if (err) console.error(err);
-  else console.log('Connected to database at', res.rows[0].now);
-});
+// Use routes
+app.use("/auth", authRoutes);
 
-
-module.exports = app;
+export default app;
