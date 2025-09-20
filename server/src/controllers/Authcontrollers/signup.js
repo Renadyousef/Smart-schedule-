@@ -38,9 +38,19 @@ export const signup = async (req, res) => {
 );
 
 
+   const user = result.rows[0];
+
+    // Generate token
+    const token = jwt.sign(
+      { id: user.UserID, email: user.Email, role: user.Role },
+      process.env.JWT_SECRET
+    );
+
+    // Respond with user + token
     res.status(201).json({
       message: "Sign Up successful!",
-      user: result.rows[0],
+      token,
+      user,
     });
   } catch (error) {
     console.error("Signup error:", error);

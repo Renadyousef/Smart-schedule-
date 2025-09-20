@@ -67,6 +67,7 @@ const handleSubmit = async (e) => {
 
   try {
     const res = await axios.post("http://localhost:5000/auth/signup", inputs);
+      localStorage.setItem("token", res.data.token);
     // Alert the user on success
     alert("User signed up successfully!");
     // Optionally, clear the form

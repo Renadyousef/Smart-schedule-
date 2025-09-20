@@ -4,6 +4,13 @@ import express from 'express';
 import cors from 'cors';
 //import ur routes
 import authRoutes from './routes/Authroute.js'; // include .js
+import wlcomeRoute from './routes/welcomeRoute.js'
+/*
+importnt note
+userId: req.user.id, role: req.user.role after u use the middleware:verfiy token!!!!!!!
+thats the token in local storage u take and send via axios in ur reqyest header 
+
+*/
 
 const app = express();
 
@@ -13,5 +20,6 @@ app.use(cors());
 
 // Use routes
 app.use("/auth", authRoutes);
+app.use('/try',wlcomeRoute)
 
 export default app;

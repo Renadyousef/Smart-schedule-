@@ -1,5 +1,9 @@
 import bcrypt from "bcrypt";
 import pool from "../../../DataBase_config/DB_config.js"; 
+import jwt from "jsonwebtoken"; //for session setup
+import dotenv from "dotenv";
+
+dotenv.config(); // load .env
 
 export const signin = async (req, res) => {
   try {
@@ -23,9 +27,19 @@ export const signin = async (req, res) => {
       return res.status(400).json({ message: "Invalid email or password" });
     }
 
+     // ✅ Generate JWT token
+    const token = jwt.sign(
+      { id: user.UserID, email: user.Email, role: user.Role },
+      process.env.JWT_SECRET,
+      { expiresIn: "1h" }
+
+    );
+
     // Success
+   // Return token to client
     res.status(200).json({
       message: "Sign in successful",
+      token, // client stores this to use in headers for protected routes
       user: {
         id: user.UserID,
         email: user.Email,

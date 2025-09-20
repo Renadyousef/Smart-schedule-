@@ -40,8 +40,8 @@ export default function SignIn() {
     try {
       const res = await axios.post("http://localhost:5000/auth/signin", inputs);
       alert(res.data.message || "Sign in successful!");
-      // Optionally: store user info or redirect
-      console.log("User info:", res.data.user);
+      //  store user info to the token
+     localStorage.setItem("token", res.data.token);
     } catch (err) {
       if (err.response) alert(err.response.data.message || "Server error.");
       else alert("Could not connect to backend.");//**error occures here
