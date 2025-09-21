@@ -42,6 +42,7 @@ export default function SignIn() {
       alert(res.data.message || "Sign in successful!");
       //  store user info to the token
      localStorage.setItem("token", res.data.token);
+     onLogin();
     } catch (err) {
       if (err.response) alert(err.response.data.message || "Server error.");
       else alert("Could not connect to backend.");//**error occures here

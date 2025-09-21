@@ -5,6 +5,7 @@ import cors from 'cors';
 //import ur routes
 import authRoutes from './routes/Authroute.js'; // include .js
 import wlcomeRoute from './routes/welcomeRoute.js'
+import FetchDepartments from './routes/FetchDepartments.js';
 /*
 importnt note
 userId: req.user.id, role: req.user.role after u use the middleware:verfiy token!!!!!!!
@@ -19,7 +20,9 @@ app.use(express.json());
 app.use(cors());
 
 // Use routes
+app.use('/api',FetchDepartments)
 app.use("/auth", authRoutes);
 app.use('/try',wlcomeRoute)
+
 
 export default app;

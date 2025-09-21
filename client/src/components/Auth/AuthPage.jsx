@@ -4,7 +4,7 @@ import SignUp from "./SignUp";
 import SignIn from "./SignIn";
 import Footer from "../Footer/Footer";
 
-export default function AuthPage() {
+export default function AuthPage({ onLogin }) {
   const [activeTab, setActiveTab] = useState("signin"); // "signup" or "signin"
 
   return (
@@ -38,7 +38,7 @@ export default function AuthPage() {
 
            
               <div className="p-4">
-                {activeTab === "signup" ? <SignUp /> : <SignIn />}
+                {activeTab === "signup" ? <SignUp onLogin={onLogin} /> : <SignIn onLogin={onLogin} />}
               </div>
             </div>
           </div>

@@ -13,7 +13,7 @@ function App() {
     setIsAuthenticated(!!token); // true if token exists
   }, []);
 
-  return isAuthenticated ? <WelcomePage /> : <AuthPage />;
+  return isAuthenticated ? <WelcomePage /> : <AuthPage onLogin={() => setIsAuthenticated(true)} />;
 }
 
 export default App;

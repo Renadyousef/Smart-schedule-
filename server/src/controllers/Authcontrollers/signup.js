@@ -1,5 +1,6 @@
 import bcrypt from "bcrypt";
 import pool from "../../../DataBase_config/DB_config.js"; // note the .js extension
+import jwt from "jsonwebtoken";
 
 // Signup
 export const signup = async (req, res) => {
@@ -22,20 +23,21 @@ export const signup = async (req, res) => {
     const fullName = `${firstName} ${lastName}`;
 
     // Insert new user (UserID is auto)
-    const result = await pool.query(
+const result = await pool.query(
   `INSERT INTO "User" 
     ("First_name", "Last_name", "Email", "Password", "Role", "DepartmentID")
    VALUES ($1, $2, $3, $4, $5, $6)
-   RETURNING "UserID", "Email", "Role"`,
+   RETURNING "UserID", "Email", "Role", "DepartmentID"`,
   [
     firstName,
     lastName,
     email,
     hashedPassword,
     role,
-    null, // DepartmentID placeholder i need to map it to actual dep
+    department, // <-- use the ID sent from frontend
   ]
 );
+
 
 
    const user = result.rows[0];
@@ -54,6 +56,6 @@ export const signup = async (req, res) => {
     });
   } catch (error) {
     console.error("Signup error:", error);
-    res.status(500).json({ message: "Signup failed" });
+    res.status(500).json({ message: "Signup failed" });//it says this 
   }
 };

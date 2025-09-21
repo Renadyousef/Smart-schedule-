@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { validateEmail, validatePassword, validateName, validateDropdown } from "./validations";
 import axios from "axios";
+import DepartmentDropdown from "./Departments";
 
 export default function SignUp() {
   const [inputs, setInputs] = useState({
@@ -68,6 +69,7 @@ const handleSubmit = async (e) => {
   try {
     const res = await axios.post("http://localhost:5000/auth/signup", inputs);
       localStorage.setItem("token", res.data.token);
+      onLogin();
     // Alert the user on success
     alert("User signed up successfully!");
     // Optionally, clear the form
@@ -144,21 +146,9 @@ const handleSubmit = async (e) => {
       {/* Department */}
       <div className="mb-3">
         <label htmlFor="department">Department</label>
-        <select
-          id="department"
-          className="form-select"
-          value={inputs.department}
-          onChange={handleChange}
-          onBlur={handleBlur}
-        >
-          <option value="">Select your department</option>
-          <option value="software">Software Engineering</option>
-          <option value="cs">Computer Science</option>
-          <option value="math">Mathematics</option>
-          <option value="physics">Physics</option>
-          <option value="biology">Biology</option>
-          <option value="islamic">Islamic Studies</option>
-        </select>
+       <DepartmentDropdown
+          onSelect={(depId) => setInputs((prev) => ({ ...prev, department: depId }))}
+        />
         {errors.department && <small className="text-danger">{errors.department}</small>}
       </div>
 
