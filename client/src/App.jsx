@@ -4,6 +4,7 @@ import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import { useState, useEffect } from 'react';
 import AuthPage from './components/Auth/AuthPage';
 import WelcomePage from './components/Auth/welcomePage';
+import HomePage from './components/TLChome/HomePage';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -13,7 +14,7 @@ function App() {
     setIsAuthenticated(!!token); // true if token exists
   }, []);
 
-  return isAuthenticated ? <WelcomePage /> : <AuthPage onLogin={() => setIsAuthenticated(true)} />;
+  return isAuthenticated ? <HomePage /> : <AuthPage onLogin={() => setIsAuthenticated(true)} />;
 }
 
 export default App;
