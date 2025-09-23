@@ -90,6 +90,22 @@ export default function ManageRules() {
     setErrors({});
     setMessage("");
   };
+  //handel delete
+  const handleDelete = async (id) => {
+  const confirm = window.confirm("Are you sure you want to delete this rule?");
+  if (!confirm) return;
+
+  try {
+    await axios.delete(`http://localhost:5000/rules/delete/${id}`);
+    setRules((prev) => prev.filter((rule) => rule.rule_id !== id));
+    setMessage("Rule deleted successfully!");
+    setTimeout(() => setMessage(""), 3000);
+  } catch (error) {
+    console.error("Error deleting rule:", error);
+    setMessage("Failed to delete rule. Try again.");
+    setTimeout(() => setMessage(""), 3000);
+  }
+};
 
   return (
     <div className="d-flex justify-content-center mt-5">
@@ -189,7 +205,7 @@ export default function ManageRules() {
                   <td>
                     <div className="d-flex gap-2">
                       <button className="btn btn-sm btn-warning">Edit</button>
-                      <button className="btn btn-sm btn-danger">Delete</button>
+                      <button onClick={() => handleDelete(rule.rule_id)} className="btn btn-sm btn-danger">Delete</button>
                     </div>
                   </td>
                 </tr>
