@@ -1,12 +1,12 @@
-import { Link } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 
 export default function Header() {
   return (
     <nav className="navbar navbar-expand-lg bg-body-tertiary">
       <div className="container-fluid">
-        <Link className="navbar-brand" to="/">
+        <NavLink className="navbar-brand" to="/">
           <img src="/Logo.png" alt="Logo" height="70" />
-        </Link>
+        </NavLink>
 
         <button
           className="navbar-toggler"
@@ -22,15 +22,32 @@ export default function Header() {
 
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
           <div className="navbar-nav">
-            <Link className="nav-link active" to="/">
+            <NavLink
+              className={({ isActive }) =>
+                "nav-link" + (isActive ? " active" : "")
+              }
+              to="/"
+            >
               Home
-            </Link>
-            <Link className="nav-link" to="/manage">
+            </NavLink>
+
+            <NavLink
+              className={({ isActive }) =>
+                "nav-link" + (isActive ? " active" : "")
+              }
+              to="/manage"
+            >
               Manage scheduling rules
-            </Link>
-            <Link className="nav-link" to="/schedules">
+            </NavLink>
+
+            <NavLink
+              className={({ isActive }) =>
+                "nav-link" + (isActive ? " active" : "")
+              }
+              to="/schedules"
+            >
               Schedules
-            </Link>
+            </NavLink>
           </div>
         </div>
       </div>

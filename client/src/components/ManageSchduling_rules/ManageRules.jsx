@@ -1,4 +1,22 @@
+import { useEffect, useState } from "react";
+import axios from "axios";
+
 export default function ManageRules() {
+  const [rules, setRules] = useState([]);
+
+  useEffect(() => {
+    const fetchRules = async () => {
+      try {
+        const response = await axios.get("http://localhost:5000/rules/display"); // replace with your endpoint
+        setRules(response.data);
+      } catch (error) {
+        console.error("Error fetching rules:", error);
+      }
+    };
+
+    fetchRules(); // call the async function
+  }, []); // empty dependency → runs once on mount
+
   return (
     <div className="d-flex justify-content-center mt-5">
       <div className="card" style={{ width: "50rem" }}>
@@ -20,28 +38,22 @@ export default function ManageRules() {
               </tr>
             </thead>
             <tbody>
-              <tr>
-                <th scope="row">1</th>
-                <td>off day</td>
-                <td>Level 3</td>
-                <td>24 hr</td>
-                <td>Mon-sun</td>
-                <td>
-                  <button className="btn btn-sm btn-warning me-2">Edit</button>
-                  <button className="btn btn-sm btn-danger">Delete</button>
-                </td>
-              </tr>
-              <tr>
-                <th scope="row">2</th>
-                <td>lab time</td>
-                <td>Level 1</td>
-                <td>2 hr</td>
-                <td>Mon</td>
-                <td>
-                  <button className="btn btn-sm btn-warning me-2">Edit</button>
-                  <button className="btn btn-sm btn-danger">Delete</button>
-                </td>
-              </tr>
+              {rules.map((rule, index) => (
+                <tr key={rule.rule_id}>
+                  <th scope="row">{index + 1}</th>
+                  <td>{rule.description}</td>
+                  <td>{rule.applies_to}</td>
+                  <td>{rule.timeBlock}</td>
+                  <td>{rule.dayConstraints}</td>
+                  <td>
+  <div className="d-flex gap-2">
+    <button className="btn btn-sm btn-warning">Edit</button>
+    <button className="btn btn-sm btn-danger">Delete</button>
+  </div>
+</td>
+
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

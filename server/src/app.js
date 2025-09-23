@@ -6,9 +6,10 @@ import cors from 'cors';
 import authRoutes from './routes/Authroute.js'; // include .js
 import wlcomeRoute from './routes/welcomeRoute.js'
 import FetchDepartments from './routes/FetchDepartments.js';
+import ManageRulesRoutes from './routes/ManageRulesRoute.js'
 /*
 importnt note
-userId: req.user.id, role: req.user.role after u use the middleware:verfiy token!!!!!!!
+userId: req.user.id,  u use the middleware:verfiy token!!!!!!!
 thats the token in local storage u take and send via axios in ur reqyest header 
 
 */
@@ -23,6 +24,7 @@ app.use(cors());
 app.use('/api',FetchDepartments)
 app.use("/auth", authRoutes);
 app.use('/try',wlcomeRoute)
+app.use('/rules',ManageRulesRoutes)
 
 
 export default app;
