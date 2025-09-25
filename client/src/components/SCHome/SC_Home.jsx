@@ -1,19 +1,17 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Header from "./Header";
 import ManageRules from "../ManageSchduling_rules/ManageRules";
-export default function SC_Home(){
- return (
+
+export default function SC_Home({ onLogout }) {
+  return (
     <Router>
-      <Header />
+      <Header onLogout={onLogout} />
       <Routes>
-        {/* Home route (default when you log in) */}
-        <Route path="/" element={<h1>Welcome to the Home Page</h1>} />
-
-        {/* Manage scheduling rules page */}
+        <Route path="/" element={<h1>Welcome to the SC Home Page</h1>} />
         <Route path="/manage" element={<ManageRules />} />
-
-        {/* You can add other routes later like schedules */}
-        {/* <Route path="/schedules" element={<Schedules />} /> */}
+        <Route path="/core" element={<h2>Core Courses Page</h2>} />
+        <Route path="/irregular" element={<h2>Irregular Students Page</h2>} />
+        <Route path="/start" element={<h2>Start Scheduling Page</h2>} />
       </Routes>
     </Router>
   );

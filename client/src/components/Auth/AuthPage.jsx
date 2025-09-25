@@ -9,16 +9,12 @@ export default function AuthPage({ onLogin }) {
 
   return (
     <div className="d-flex flex-column min-vh-100">
-   
       <AuthNav />
 
-     
       <main className="container my-5 flex-grow-1">
         <div className="row justify-content-center">
           <div className="col-md-6 col-lg-5">
             <div className="card shadow">
-              
-            
               <div className="d-flex">
                 <div
                   className={`flex-fill text-center py-2 ${activeTab === "signup" ? "bg-primary text-white fw-bold" : "bg-light text-muted"}`}
@@ -36,16 +32,17 @@ export default function AuthPage({ onLogin }) {
                 </div>
               </div>
 
-           
               <div className="p-4">
-                {activeTab === "signup" ? <SignUp onLogin={onLogin} /> : <SignIn onLogin={onLogin} />}
+                {activeTab === "signup"
+                  ? <SignUp onLogin={onLogin} />
+                  : <SignIn onLogin={onLogin} />
+                }
               </div>
             </div>
           </div>
         </div>
       </main>
 
-    
       <Footer />
     </div>
   );

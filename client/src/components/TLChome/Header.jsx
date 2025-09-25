@@ -1,6 +1,12 @@
-import { NavLink } from "react-router-dom";
+import { NavLink, useNavigate } from "react-router-dom";
 
-export default function Header() {
+export default function Header({ onLogout }) {
+  const navigate = useNavigate();
+
+  const goProfile = () => {
+    navigate("/account"); // أو "/profile" حسب مسار صفحة البروفايل
+  };
+
   return (
     <nav className="navbar navbar-expand-lg bg-body-tertiary">
       <div className="container-fluid">
@@ -21,33 +27,63 @@ export default function Header() {
         </button>
 
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
-          <div className="navbar-nav">
-            <NavLink
-              className={({ isActive }) =>
-                "nav-link" + (isActive ? " active" : "")
-              }
-              to="/"
-            >
+          <div className="navbar-nav me-auto">
+            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/">
               Home
             </NavLink>
-
-            <NavLink
-              className={({ isActive }) =>
-                "nav-link" + (isActive ? " active" : "")
-              }
-              to="/manage"
-            >
+            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/manage">
               Manage scheduling rules
             </NavLink>
-
-            <NavLink
-              className={({ isActive }) =>
-                "nav-link" + (isActive ? " active" : "")
-              }
-              to="/schedules"
-            >
+            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/schedules">
               Schedules
             </NavLink>
+          </div>
+
+          {/* Profile dropdown */}
+          <div className="dropdown">
+            <button
+              className="btn btn-light d-flex align-items-center gap-2 dropdown-toggle"
+              type="button"
+              id="userMenuBtn"
+              data-bs-toggle="dropdown"
+              aria-expanded="false"
+            >
+              <img
+                src="/avatar.png"
+                alt="Profile"
+                width="32"
+                height="32"
+                className="rounded-circle border"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                  const fallback = document.getElementById("avatar-fallback");
+                  if (fallback) fallback.style.display = "inline-flex";
+                }}
+              />
+              <span
+                id="avatar-fallback"
+                style={{ display: "none" }}
+                className="rounded-circle bg-secondary text-white fw-semibold d-inline-flex align-items-center justify-content-center"
+              >
+                <span style={{ width: 32, height: 32, lineHeight: "32px", textAlign: "center", fontSize: 12 }}>
+                  TLC
+                </span>
+              </span>
+            </button>
+
+            <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuBtn">
+              <li>
+                <button className="dropdown-item" onClick={goProfile}>
+                  View Profile
+                </button>
+              </li>
+              <li><hr className="dropdown-divider" /></li>
+              <li>
+                <button className="dropdown-item text-danger" onClick={onLogout}>
+                  Log out
+                </button>
+              </li>
+            </ul>
           </div>
         </div>
       </div>

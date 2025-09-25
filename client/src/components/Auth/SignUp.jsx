@@ -3,7 +3,7 @@ import { validateEmail, validatePassword, validateName, validateDropdown } from 
 import axios from "axios";
 import DepartmentDropdown from "./Departments";
 
-export default function SignUp() {
+export default function SignUp({ onLogin }) {
   const [inputs, setInputs] = useState({
     firstName: "",
     lastName: "",
@@ -15,13 +15,11 @@ export default function SignUp() {
 
   const [errors, setErrors] = useState({});
 
-  // Update input value
   const handleChange = (e) => {
     const { id, value } = e.target;
     setInputs((prev) => ({ ...prev, [id]: value }));
   };
 
-  // Validate a single field on blur
   const handleBlur = (e) => {
     const { id, value } = e.target;
     let error = "";
@@ -29,69 +27,70 @@ export default function SignUp() {
     switch (id) {
       case "firstName":
       case "lastName":
-        error = validateName(value);
-        break;
+        error = validateName(value); break;
       case "role":
       case "department":
-        error = validateDropdown(value);
-        break;
+        error = validateDropdown(value); break;
       case "email":
-        error = validateEmail(value);
-        break;
+        error = validateEmail(value); break;
       case "password":
-        error = validatePassword(value);
-        break;
-      default:
-        break;
+        error = validatePassword(value); break;
+      default: break;
     }
-
     setErrors((prev) => ({ ...prev, [id]: error }));
   };
 
-const handleSubmit = async (e) => {
-  e.preventDefault();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
 
-  // Frontend validation
-  const allErrors = {
-    firstName: validateName(inputs.firstName),
-    lastName: validateName(inputs.lastName),
-    email: validateEmail(inputs.email),
-    password: validatePassword(inputs.password),
-  };
+    // Frontend validation
+    const allErrors = {
+      firstName: validateName(inputs.firstName),
+      lastName: validateName(inputs.lastName),
+      role: validateDropdown(inputs.role),
+      department: validateDropdown(inputs.department),
+      email: validateEmail(inputs.email),
+      password: validatePassword(inputs.password),
+    };
 
-  setErrors(allErrors);
-
-  if (!Object.values(allErrors).every((err) => !err)) {
-    alert("Please fix errors before submitting.");
-    return;
-  }
-
-  try {
-    const res = await axios.post("http://localhost:5000/auth/signup", inputs);
-      localStorage.setItem("token", res.data.token);
-      onLogin();
-    // Alert the user on success
-    alert("User signed up successfully!");
-    // Optionally, clear the form
-    setInputs({
-      firstName: "",
-      lastName: "",
-      role: "",
-      department: "",
-      email: "",
-      password: "",
-    });
-    setErrors({});
-  } catch (err) {
-    if (err.response) {
-      alert(err.response.data.message || "Server error.");
-    } else {
-      alert("Could not connect to backend.");
+    setErrors(allErrors);
+    if (!Object.values(allErrors).every((err) => !err)) {
+      alert("Please fix errors before submitting.");
+      return;
     }
-  }
-};
 
+    try {
+      const res = await axios.post("http://localhost:5000/auth/signup", inputs);
 
+      const token = res?.data?.token;
+      const roleFromApi =
+        res?.data?.role ||
+        res?.data?.user?.role ||
+        inputs.role; // fallback على اختيار المستخدم
+
+      if (token) localStorage.setItem("token", token);
+      if (roleFromApi) localStorage.setItem("role", String(roleFromApi).toLowerCase());
+
+      alert("User signed up successfully!");
+      if (onLogin) onLogin();
+
+      setInputs({
+        firstName: "",
+        lastName: "",
+        role: "",
+        department: "",
+        email: "",
+        password: "",
+      });
+      setErrors({});
+    } catch (err) {
+      if (err.response) {
+        alert(err.response.data.message || "Server error.");
+      } else {
+        alert("Could not connect to backend.");
+      }
+    }
+  };
 
   return (
     <form className="p-4" onSubmit={handleSubmit}>
@@ -146,7 +145,7 @@ const handleSubmit = async (e) => {
       {/* Department */}
       <div className="mb-3">
         <label htmlFor="department">Department</label>
-       <DepartmentDropdown
+        <DepartmentDropdown
           onSelect={(depId) => setInputs((prev) => ({ ...prev, department: depId }))}
         />
         {errors.department && <small className="text-danger">{errors.department}</small>}

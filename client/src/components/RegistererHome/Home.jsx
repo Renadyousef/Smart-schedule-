@@ -1,21 +1,23 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Header from "./Header";
 
-
-export default function Home() {
+export default function Home({ onLogout }) {
   return (
     <Router>
-      <Header />
+      {/* نمرر دالة تسجيل الخروج للـ Header */}
+      <Header onLogout={onLogout} />
+
       <Routes>
-        {/* Home route (default when you log in) */}
-        <Route path="/" element={<h1>Welcome to the Home Page</h1>} />
+        {/* الصفحة الرئيسية */}
+        <Route path="/" element={<h1>Welcome to the Home Page rg</h1>} />
 
-        {/* Manage scheduling rules page */}
-       
+        {/* صفحة إدارة القواعد (مثال) */}
+        <Route path="/rules" element={<h2>Manage Scheduling Rules</h2>} />
 
-        {/* You can add other routes later like schedules */}
+        {/* مثال: صفحة أخرى */}
         {/* <Route path="/schedules" element={<Schedules />} /> */}
       </Routes>
     </Router>
   );
 }
+

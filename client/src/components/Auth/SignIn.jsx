@@ -2,61 +2,77 @@ import { useState } from "react";
 import { validateEmail, validatePassword } from "./validations";
 import axios from "axios";
 
-
-export default function SignIn() {
-  const [inputs, setInputs] = useState({
-    email: "",
-    password: "",
-  });
-
+export default function SignIn({ onLogin }) {
+  const [inputs, setInputs] = useState({ email: "", password: "" });
   const [errors, setErrors] = useState({});
 
+  // تحديث الحقول
   const handleChange = (e) => {
     const { id, value } = e.target;
     setInputs((prev) => ({ ...prev, [id]: value }));
   };
 
+  // التحقق عند فقدان التركيز
   const handleBlur = (e) => {
     const { id, value } = e.target;
     let error = "";
-
     if (id === "email") error = validateEmail(value);
     if (id === "password") error = validatePassword(value);
-
     setErrors((prev) => ({ ...prev, [id]: error }));
   };
 
- const handleSubmit = async (e) => {
+  // عند الضغط على زر تسجيل الدخول
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // التحقق من الأخطاء
     const allErrors = {
       email: validateEmail(inputs.email),
       password: validatePassword(inputs.password),
     };
     setErrors(allErrors);
-
-    if (!Object.values(allErrors).every((err) => !err)) return;
+    if (!Object.values(allErrors).every((x) => !x)) return;
 
     try {
+      // 🔑 الاتصال المباشر بالسيرفر على localhost:5000
       const res = await axios.post("http://localhost:5000/auth/signin", inputs);
+
+      const token = res?.data?.token;
+      const role = res?.data?.role || res?.data?.user?.role || "";
+
+      if (!token) {
+        alert("Signin succeeded but no token returned.");
+        return;
+      }
+
+      // تخزين البيانات في localStorage
+      localStorage.setItem("token", token);
+      if (role) localStorage.setItem("role", String(role).toLowerCase());
+
       alert(res.data.message || "Sign in successful!");
-      //  store user info to the token
-     localStorage.setItem("token", res.data.token);
-     onLogin();
+
+      if (typeof onLogin === "function") onLogin();
     } catch (err) {
-      if (err.response) alert(err.response.data.message || "Server error.");
-      else alert("Could not connect to backend.");//**error occures here
+      console.error("Signin error:", err);
+
+      if (err?.code === "ERR_NETWORK") {
+        alert("Network error: Could not connect to backend. تأكدي أن السيرفر شغال على http://localhost:5000");
+        return;
+      }
+
+      if (err?.response) {
+        alert(err.response.data?.message || `Server error (${err.response.status}).`);
+      } else {
+        alert(err?.message || "Unknown error.");
+      }
     }
   };
-
 
   return (
     <form className="p-4" onSubmit={handleSubmit}>
       {/* Email */}
       <div className="mb-3">
-        <label htmlFor="email" className="form-label">
-          Email
-        </label>
+        <label htmlFor="email" className="form-label">Email</label>
         <input
           type="email"
           id="email"
@@ -71,9 +87,7 @@ export default function SignIn() {
 
       {/* Password */}
       <div className="mb-3">
-        <label htmlFor="password" className="form-label">
-          Password
-        </label>
+        <label htmlFor="password" className="form-label">Password</label>
         <input
           type="password"
           id="password"
@@ -86,10 +100,7 @@ export default function SignIn() {
         {errors.password && <small className="text-danger">{errors.password}</small>}
       </div>
 
-      {/* Submit Button */}
-      <button type="submit" className="btn btn-primary w-100">
-        Sign In
-      </button>
+      <button type="submit" className="btn btn-primary w-100">Sign In</button>
     </form>
   );
 }

@@ -1,21 +1,16 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Header from "./Header";
 
-
-export default function StudentHome() {
+export default function StudentHome({ onLogout }) {
   return (
     <Router>
-      <Header />
+      <Header onLogout={onLogout} />
       <Routes>
-        {/* Home route (default when you log in) */}
-        <Route path="/" element={<h1>Welcome to the Home Page</h1>} />
-
-        {/* Manage scheduling rules page */}
-       
-
-        {/* You can add other routes later like schedules */}
-        {/* <Route path="/schedules" element={<Schedules />} /> */}
+        <Route path="/" element={<h1>Welcome to the Home Page st </h1>} />
+        {/* لاحقًا: <Route path="/schedules" element={<Schedules />} /> */}
+        {/* لاحقًا: <Route path="/personalized" element={<Personalized />} /> */}
       </Routes>
     </Router>
   );
 }
+
