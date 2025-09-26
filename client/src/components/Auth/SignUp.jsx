@@ -181,5 +181,6 @@ export default function SignUp({ onLogin }) {
 
       <button type="submit" className="btn btn-primary w-100">Sign Up</button>
     </form>
+    
   );
 }

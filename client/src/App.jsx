@@ -8,7 +8,7 @@ import RegistrarHome from './components/RegistererHome/Home';   // Home.jsx لل
 import SC_Home       from './components/SCHome/SC_Home';        // Schedule Committee
 import StudentHome   from './components/StudentHome/StudentHome';
 import TLCHomePage   from './components/TLChome/HomePage';      // Teaching Load Committee
-
+import InstructorHome from './components/Instructor/InstructorHome'
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [role, setRole] = useState('');
