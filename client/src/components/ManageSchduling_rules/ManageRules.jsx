@@ -3,15 +3,16 @@ import axios from "axios";
 
 export default function ManageRules() {
   const [rules, setRules] = useState([]);
-  const [showForm, setShowForm] = useState(false); // toggle form visibility
+  const [showForm, setShowForm] = useState(false);
   const [newRule, setNewRule] = useState({
     description: "",
     applies_to: "3",
     timeBlock: "",
     dayConstraints: "",
   });
+  const [editingRule, setEditingRule] = useState(null); // <-- track editing
   const [errors, setErrors] = useState({});
-  const [message, setMessage] = useState(""); // success/error message
+  const [message, setMessage] = useState("");
 
   // Fetch rules on mount
   useEffect(() => {
@@ -26,10 +27,10 @@ export default function ManageRules() {
     fetchRules();
   }, []);
 
-  // Input validation
+  // Validation (same as yours)...
   const validate = () => {
     const errs = {};
-    const days = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
+    const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
 
     if (!["All", "3", "4", "5", "6", "7", "8"].includes(newRule.applies_to)) {
       errs.applies_to = "Invalid level selection";
@@ -55,72 +56,101 @@ export default function ManageRules() {
     return Object.keys(errs).length === 0;
   };
 
-  // Handle form submission
+  // Handle form submit (add or edit)
   const handleSubmit = async (e) => {
     e.preventDefault();
-    setMessage(""); // clear previous message
+    setMessage("");
     if (!validate()) return;
 
     try {
-      const response = await axios.post("http://localhost:5000/rules/add", newRule);
+      if (editingRule) {
+        // --- UPDATE EXISTING ---
+        await axios.put(`http://localhost:5000/rules/update/${editingRule.rule_id}`, newRule);
 
-      // Update table with new rule
-      setRules((prev) => [...prev, response.data]);
+        setRules((prev) =>
+          prev.map((rule) =>
+            rule.rule_id === editingRule.rule_id ? { ...rule, ...newRule } : rule
+          )
+        );
 
-      // Reset form & hide
+        setMessage("Rule updated successfully!");
+      } else {
+        // --- ADD NEW ---
+        const response = await axios.post("http://localhost:5000/rules/add", newRule);
+        setRules((prev) => [...prev, response.data]);
+        setMessage("Rule added successfully!");
+      }
+
+      // Reset
       setNewRule({ description: "", applies_to: "3", timeBlock: "", dayConstraints: "" });
-      setErrors({});
+      setEditingRule(null);
       setShowForm(false);
+      setErrors({});
 
-      // Show success message
-      setMessage("Rule added successfully!");
-      // Auto-hide message after 3 seconds
       setTimeout(() => setMessage(""), 3000);
     } catch (error) {
-      console.error("Error adding rule:", error);
-      setMessage("Failed to add rule. Try again.");
+      console.error("Error saving rule:", error);
+      setMessage("Failed to save rule. Try again.");
       setTimeout(() => setMessage(""), 3000);
     }
   };
 
-  // Cancel form
   const handleCancel = () => {
     setShowForm(false);
     setNewRule({ description: "", applies_to: "3", timeBlock: "", dayConstraints: "" });
+    setEditingRule(null);
     setErrors({});
     setMessage("");
   };
-  //handel delete
-  const handleDelete = async (id) => {
-  const confirm = window.confirm("Are you sure you want to delete this rule?");
-  if (!confirm) return;
 
-  try {
-    await axios.delete(`http://localhost:5000/rules/delete/${id}`);
-    setRules((prev) => prev.filter((rule) => rule.rule_id !== id));
-    setMessage("Rule deleted successfully!");
-    setTimeout(() => setMessage(""), 3000);
-  } catch (error) {
-    console.error("Error deleting rule:", error);
-    setMessage("Failed to delete rule. Try again.");
-    setTimeout(() => setMessage(""), 3000);
-  }
-};
+  // Delete (same as yours)
+  const handleDelete = async (id) => {
+    const confirm = window.confirm("Are you sure you want to delete this rule?");
+    if (!confirm) return;
+
+    try {
+      await axios.delete(`http://localhost:5000/rules/delete/${id}`);
+      setRules((prev) => prev.filter((rule) => rule.rule_id !== id));
+      setMessage("Rule deleted successfully!");
+      setTimeout(() => setMessage(""), 3000);
+    } catch (error) {
+      console.error("Error deleting rule:", error);
+      setMessage("Failed to delete rule. Try again.");
+      setTimeout(() => setMessage(""), 3000);
+    }
+  };
+
+  // Start editing
+  const handleEdit = (rule) => {
+    setEditingRule(rule);
+    setNewRule({
+      description: rule.description,
+      applies_to: rule.applies_to,
+      timeBlock: rule.timeBlock,
+      dayConstraints: rule.dayConstraints,
+    });
+    setShowForm(true);
+  };
 
   return (
     <div className="d-flex justify-content-center mt-5">
-      <div className="card" style={{ width: "50rem" }}>
+      <div className="card w-100" style={{ maxWidth: "50rem" }}>
         <div className="card-body d-flex justify-content-between align-items-center">
           <h5 className="card-title mb-0">Manage Scheduling Rules</h5>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowForm(true)}>
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={() => {
+              setShowForm(true);
+              setEditingRule(null);
+              setNewRule({ description: "", applies_to: "3", timeBlock: "", dayConstraints: "" });
+            }}
+          >
             + Add Rule
           </button>
         </div>
 
-        {/* Confirmation message */}
         {message && <div className="alert alert-info m-3">{message}</div>}
 
-        {/* Show form only if showForm is true */}
         {showForm && (
           <form className="p-3 border-bottom" onSubmit={handleSubmit}>
             <div className="mb-2">
@@ -172,7 +202,7 @@ export default function ManageRules() {
             </div>
             <div className="d-flex gap-2">
               <button type="submit" className="btn btn-success btn-sm">
-                Add Rule
+                {editingRule ? "Save Changes" : "Add Rule"}
               </button>
               <button type="button" className="btn btn-secondary btn-sm" onClick={handleCancel}>
                 Cancel
@@ -196,7 +226,7 @@ export default function ManageRules() {
             </thead>
             <tbody>
               {rules.map((rule, index) => (
-                <tr key={index}>
+                <tr key={rule.rule_id}>
                   <th scope="row">{index + 1}</th>
                   <td>{rule.description}</td>
                   <td>{rule.applies_to}</td>
@@ -204,8 +234,18 @@ export default function ManageRules() {
                   <td>{rule.dayConstraints}</td>
                   <td>
                     <div className="d-flex gap-2">
-                      <button className="btn btn-sm btn-warning">Edit</button>
-                      <button onClick={() => handleDelete(rule.rule_id)} className="btn btn-sm btn-danger">Delete</button>
+                      <button
+                        onClick={() => handleEdit(rule)}
+                        className="btn btn-sm btn-warning"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(rule.rule_id)}
+                        className="btn btn-sm btn-danger"
+                      >
+                        Delete
+                      </button>
                     </div>
                   </td>
                 </tr>

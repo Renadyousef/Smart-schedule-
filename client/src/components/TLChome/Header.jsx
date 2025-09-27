@@ -31,9 +31,7 @@ export default function Header({ onLogout }) {
             <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/">
               Home
             </NavLink>
-            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/manage">
-              Manage scheduling rules
-            </NavLink>
+           
             <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/schedules">
               Schedules
             </NavLink>
