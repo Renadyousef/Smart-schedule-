@@ -3,7 +3,7 @@ import { validateEmail, validatePassword, validateName, validateDropdown } from 
 import axios from "axios";
 import DepartmentDropdown from "./Departments";
 
-export default function SignUp({ onLogin }) {
+export default function SignUp({ onSignedUp }) {
   const [inputs, setInputs] = useState({
     firstName: "",
     lastName: "",
@@ -12,7 +12,6 @@ export default function SignUp({ onLogin }) {
     email: "",
     password: "",
   });
-
   const [errors, setErrors] = useState({});
 
   const handleChange = (e) => {
@@ -23,7 +22,6 @@ export default function SignUp({ onLogin }) {
   const handleBlur = (e) => {
     const { id, value } = e.target;
     let error = "";
-
     switch (id) {
       case "firstName":
       case "lastName":
@@ -43,7 +41,6 @@ export default function SignUp({ onLogin }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
 
-    // Frontend validation
     const allErrors = {
       firstName: validateName(inputs.firstName),
       lastName: validateName(inputs.lastName),
@@ -52,7 +49,6 @@ export default function SignUp({ onLogin }) {
       email: validateEmail(inputs.email),
       password: validatePassword(inputs.password),
     };
-
     setErrors(allErrors);
     if (!Object.values(allErrors).every((err) => !err)) {
       alert("Please fix errors before submitting.");
@@ -60,20 +56,18 @@ export default function SignUp({ onLogin }) {
     }
 
     try {
-      const res = await axios.post("http://localhost:5000/auth/signup", inputs);
+      await axios.post("http://localhost:5000/auth/signup", inputs);
 
-      const token = res?.data?.token;
-      const roleFromApi =
-        res?.data?.role ||
-        res?.data?.user?.role ||
-        inputs.role; // fallback على اختيار المستخدم
+      // ملاحظة: ما نحفظ التوكن هنا — نخلي المستخدم يسوي تسجيل دخول يدوي
+      alert("Signed up successfully. Please sign in.");
 
-      if (token) localStorage.setItem("token", token);
-      if (roleFromApi) localStorage.setItem("role", String(roleFromApi).toLowerCase());
+      // اختياري: خزّن الإيميل مؤقتًا لتعبئة حقل الدخول تلقائيًا
+      localStorage.setItem("prefillEmail", inputs.email);
 
-      alert("User signed up successfully!");
-      if (onLogin) onLogin();
+      // بدّل التبويب إلى Sign In
+      if (onSignedUp) onSignedUp();
 
+      // نظّف الحقول
       setInputs({
         firstName: "",
         lastName: "",
@@ -135,7 +129,7 @@ export default function SignUp({ onLogin }) {
           <option value="">Select your role</option>
           <option value="student">Student</option>
           <option value="instructor">Instructor</option>
-          <option value="Sc">Schudling Committee</option>
+          <option value="sc">Scheduling Committee</option>{/* انتبه: sc بحروف صغيرة */}
           <option value="tlc">Teaching Load Committee</option>
           <option value="registrar">Registrar</option>
         </select>
@@ -181,6 +175,5 @@ export default function SignUp({ onLogin }) {
 
       <button type="submit" className="btn btn-primary w-100">Sign Up</button>
     </form>
-    
   );
 }

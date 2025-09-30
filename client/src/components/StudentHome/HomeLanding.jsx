@@ -148,9 +148,7 @@ export default function HomeLanding() {
               <small className="text-muted">You can do this anytime from your profile.</small>
             </div>
             <div className="popup-footer d-flex gap-2 justify-content-end">
-              <button className="btn btn-outline-secondary" onClick={() => setShowPopup(false)}>
-                Remind me
-              </button>
+            
               <button
                 className="btn btn-primary"
                 onClick={() => {

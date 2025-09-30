@@ -5,7 +5,7 @@ import SignIn from "./SignIn";
 import Footer from "../Footer/Footer";
 
 export default function AuthPage({ onLogin }) {
-  const [activeTab, setActiveTab] = useState("signin"); // "signup" or "signin"
+  const [activeTab, setActiveTab] = useState("signin"); // "signup" | "signin"
 
   return (
     <div className="d-flex flex-column min-vh-100">
@@ -34,7 +34,7 @@ export default function AuthPage({ onLogin }) {
 
               <div className="p-4">
                 {activeTab === "signup"
-                  ? <SignUp onLogin={onLogin} />
+                  ? <SignUp onSignedUp={() => setActiveTab("signin")} />
                   : <SignIn onLogin={onLogin} />
                 }
               </div>

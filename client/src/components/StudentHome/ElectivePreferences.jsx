@@ -167,7 +167,7 @@ export default function ElectivePreferences() {
   const [error, setError]     = useState("");
   const [byCat, setByCat]     = useState({ islamic: [], mathscience: [], cs_it: [] });
 
-  // Fetch student level + history (بدون تهيئة reasons/notes من DB)
+  // Fetch student level + history (لا نهيّئ reasons/notes من DB)
   useEffect(() => {
     const studentId = getUserIdFromLocalStorage();
     const token = getAuthToken();
@@ -195,8 +195,6 @@ export default function ElectivePreferences() {
           lv = "";
         }
         setLevel(lv);
-
-        // لا نقوم بتهيئة reasons/notes من DB هنا (حتى لا ترجع بعد refresh)
 
         // fetch history
         await fetchHistory(studentId, token);
@@ -329,12 +327,8 @@ export default function ElectivePreferences() {
         setTimeout(()=>toast.classList.remove("show"), 2200);
       }
 
-      // صفّي الحقول بعد الحفظ (reasons + notes + selectedCode)
-      setReasons({ interest:false, gpa:false, easy:false, schedule:false });
-      setNotes("");
-      setSelectedCode("");
-      // إن أردت أيضًا تصفية قائمة التفضيلات بعد الحفظ، أزل التعليق التالي:
-      // setPrefs([]);
+      // ✅ فرّغي النموذج بالكامل (يشمل prefs)
+      resetAll();
 
       // refresh history after save
       await fetchHistory(studentId, token);
@@ -615,7 +609,7 @@ export default function ElectivePreferences() {
           border:1px solid #e3ebff;
           border-radius:999px;
           padding:.45rem 1rem;
-          transition: all .2s ease;
+          transition: all .2s ease.
         }
         .pill-tab:hover{ transform: translateY(-1px); }
         .pill-tab.active{
