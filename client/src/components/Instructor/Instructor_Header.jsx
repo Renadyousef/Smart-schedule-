@@ -1,80 +1,103 @@
 // src/components/InstructorHome/Instructor_Header.jsx
-import { NavLink, useNavigate } from "react-router-dom";
+import React from "react";
+import { NavLink, Link, useInRouterContext } from "react-router-dom";
 
-export default function Instructor_Header({ onLogout }) {
-  const navigate = useNavigate();
+// توليد الأحرف الأولى عند فشل صورة الأفاتار
+function useInitials(userName, email, fallback = "IN") {
+  return React.useMemo(() => {
+    const src =
+      (userName && userName.trim()) ||
+      (email ? email.split("@")[0].replace(/[._-]+/g, " ").trim() : "");
+    if (!src) return fallback;
+    const parts = src.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts.at(-1)[0]).toUpperCase();
+    return src.slice(0, 2).toUpperCase();
+  }, [userName, email, fallback]);
+}
 
-  const goProfile = () => {
-    navigate("/account"); // أو "/profile" حسب مسار صفحة البروفايل عندك
-  };
+export default function Instructor_Header({
+  onLogout = () => {},
+  userName = "Instructor",
+  email = "instructor@example.com",
+  avatarUrl = "/avatar.png",
+}) {
+  const inRouter = useInRouterContext();
+  const [avatarErr, setAvatarErr] = React.useState(false);
+  const initials = useInitials(userName, email, "IN");
+
+  // يدعم العمل داخل/خارج الراوتر
+  const Brand = inRouter ? NavLink : (p) => <a {...p} href="/" />;
+  const LinkEl = inRouter
+    ? ({ to, children }) => (
+        <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to={to}>
+          {children}
+        </NavLink>
+      )
+    : ({ to, children }) => (
+        <a className="nav-link" href={to}>
+          {children}
+        </a>
+      );
+
+  const ProfileLink = ({ children }) =>
+    inRouter ? <Link className="dropdown-item" to="/account">{children}</Link> : <a className="dropdown-item" href="/account">{children}</a>;
 
   return (
     <nav className="navbar navbar-expand-lg bg-body-tertiary">
       <div className="container-fluid">
-        <NavLink className="navbar-brand" to="/">
+        <Brand className="navbar-brand" to="/">
           <img src="/Logo.png" alt="Logo" height="70" />
-        </NavLink>
+        </Brand>
 
         <button
           className="navbar-toggler"
           type="button"
           data-bs-toggle="collapse"
-          data-bs-target="#navbarNavAltMarkup"
-          aria-controls="navbarNavAltMarkup"
+          data-bs-target="#navbarNavInstructor"
+          aria-controls="navbarNavInstructor"
           aria-expanded="false"
           aria-label="Toggle navigation"
         >
-          <span className="navbar-toggler-icon"></span>
+          <span className="navbar-toggler-icon" />
         </button>
 
-        <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
-          {/* روابط الـ Instructor */}
+        <div className="collapse navbar-collapse" id="navbarNavInstructor">
+          {/* تبويبات المدرّس */}
           <div className="navbar-nav me-auto">
-            <NavLink className="nav-link" to="/">Home</NavLink>
-            <NavLink className="nav-link" to="/assigned-courses">
-              View Assigned Courses Schedule
-            </NavLink>
+            <LinkEl to="/">Home</LinkEl>
+            <LinkEl to="/assigned-courses">Assigned Courses</LinkEl>
           </div>
 
-          {/* منيو المستخدم (بروفايل + لوج آوت) */}
+          {/* منيو المستخدم */}
           <div className="dropdown">
             <button
               className="btn btn-light d-flex align-items-center gap-2 dropdown-toggle"
               type="button"
-              id="userMenuBtn"
+              id="userMenuInstructor"
               data-bs-toggle="dropdown"
               aria-expanded="false"
             >
-              {/* صورة البروفايل */}
-              <img
-                src="/avatar.png"
-                alt="Profile"
-                width="32"
-                height="32"
-                className="rounded-circle border"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                  const fallback = document.getElementById("avatar-fallback");
-                  if (fallback) fallback.style.display = "inline-flex";
-                }}
-              />
-              <span
-                id="avatar-fallback"
-                style={{ display: "none" }}
-                className="rounded-circle bg-secondary text-white fw-semibold d-inline-flex align-items-center justify-content-center"
-              >
-                <span style={{ width: 32, height: 32, lineHeight: "32px", textAlign: "center", fontSize: 12 }}>
-                  IN
+              {!avatarErr ? (
+                <img
+                  src={avatarUrl}
+                  alt="Profile"
+                  width="32"
+                  height="32"
+                  className="rounded-circle border"
+                  onError={() => setAvatarErr(true)}
+                />
+              ) : (
+                <span
+                  className="rounded-circle bg-secondary text-white fw-semibold d-inline-flex align-items-center justify-content-center"
+                  style={{ width: 32, height: 32, fontSize: 12 }}
+                >
+                  {initials}
                 </span>
-              </span>
+              )}
             </button>
 
-            <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuBtn">
-              <li>
-                <button className="dropdown-item" onClick={goProfile}>
-                  View Profile
-                </button>
-              </li>
+            <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuInstructor">
+              <li><ProfileLink>View Profile</ProfileLink></li>
               <li><hr className="dropdown-divider" /></li>
               <li>
                 <button className="dropdown-item text-danger" onClick={onLogout}>

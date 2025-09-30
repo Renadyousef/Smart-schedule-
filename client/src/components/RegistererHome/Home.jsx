@@ -1,9 +1,11 @@
+// src/components/RegistrarHome/Home.jsx
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from "react-router-dom";
 import Header from "./Header";
 import "bootstrap/dist/css/bootstrap.min.css";
 
-// إذا عندك الملف في نفس المجلد (RegistererHome):
+// صفحات
 import AddIrregularStudent from "./AddIrregularStudent";
+import RegistrarProfile from "../Profiles/RegistrarProfile.jsx"; // ✅ مهم: استيراد صفحة البروفايل
 
 /* ======================= Dashboard ======================= */
 function Dashboard() {
@@ -47,7 +49,6 @@ function Dashboard() {
         <div className="card-body">
           <h5 className="mb-3">Quick Actions</h5>
           <div className="d-flex flex-wrap gap-2">
-            {/* <<< التعديل هنا: صار Link يفتح صفحة الإضافة >>> */}
             <Link to="/registrar/irregular/add" className="btn btn-primary">
               + Add Irregular Student
             </Link>
@@ -151,7 +152,10 @@ export default function Home() {
         <Route path="/registrar/requests" element={<CommitteeRequests />} />
         <Route path="/registrar/electives" element={<OfferElectives />} />
 
-        {/* <<< روت صفحة الإضافة >>> */}
+        {/* ✅ صفحة البروفايل */}
+        <Route path="/account" element={<RegistrarProfile />} />
+
+        {/* صفحة إضافة irregular */}
         <Route path="/registrar/irregular/add" element={<AddIrregularStudent />} />
 
         <Route path="*" element={<Navigate to="/" replace />} />

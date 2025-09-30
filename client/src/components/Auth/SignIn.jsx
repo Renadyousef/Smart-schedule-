@@ -37,20 +37,51 @@ export default function SignIn({ onLogin }) {
       // 🔑 الاتصال المباشر بالسيرفر على localhost:5000
       const res = await axios.post("http://localhost:5000/auth/signin", inputs);
 
-      const token = res?.data?.token;
-      const role = res?.data?.role || res?.data?.user?.role || "";
-
-      if (!token) {
-        alert("Signin succeeded but no token returned.");
+      // ✅ أضفنا تخزين بيانات المستخدم هنا
+      const { token, user } = res.data || {};
+      if (!token || !user) {
+        alert("Unexpected server response.");
         return;
       }
 
-      // تخزين البيانات في localStorage
+      // ★ ADD: لو المستخدم طالب وما فيه level في رد تسجيل الدخول، جيبيه من البروفايل ثم خزّنه
+      let finalUser = user;
+      try {
+        const isStudent = String(user.role || "").toLowerCase() === "student";
+        const hasLevel =
+          user.level !== undefined && user.level !== null && user.level !== "";
+        if (isStudent && !hasLevel) {
+          const prof = await axios.get(
+            `http://localhost:5000/api/profile/${user.id}`,
+            { headers: { Authorization: `Bearer ${token}` } }
+          );
+          finalUser = { ...user, level: prof.data?.level ?? null };
+        }
+      } catch (e2) {
+        // لو فشل الجلب الإضافي، كمّلي بدون level
+        console.warn("Could not fetch level after signin:", e2?.message);
+      }
+
+      // ★ ADD: خزّني user كامل (بما فيه level إن توفر)
       localStorage.setItem("token", token);
+      localStorage.setItem(
+        "user",
+        JSON.stringify({
+          id: finalUser.id,
+          name: finalUser.name ?? "",
+          email: finalUser.email,
+          role: finalUser.role,
+          level:
+            finalUser.level === undefined || finalUser.level === null || finalUser.level === ""
+              ? null
+              : Number(finalUser.level),
+        })
+      );
+
+      const role = res?.data?.role || res?.data?.user?.role || "";
       if (role) localStorage.setItem("role", String(role).toLowerCase());
 
       alert(res.data.message || "Sign in successful!");
-
       if (typeof onLogin === "function") onLogin();
     } catch (err) {
       console.error("Signin error:", err);

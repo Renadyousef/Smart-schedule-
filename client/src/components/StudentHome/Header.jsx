@@ -1,94 +1,101 @@
-// Header.jsx
-import { NavLink, useNavigate } from "react-router-dom";
+import React from "react";
+import { NavLink, Link, useInRouterContext } from "react-router-dom";
 
-export default function Header({ onLogout }) {
-  const navigate = useNavigate();
+function useInitials(userName, email, fallback = "ST") {
+  return React.useMemo(() => {
+    const src =
+      (userName && userName.trim()) ||
+      (email ? email.split("@")[0].replace(/[._-]+/g, " ").trim() : "");
+    if (!src) return fallback;
+    const parts = src.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) return (parts[0][0] + parts.at(-1)[0]).toUpperCase();
+    return src.slice(0, 2).toUpperCase();
+  }, [userName, email, fallback]);
+}
 
-  const goProfile = () => {
-    navigate("/account"); // غيّريها إلى /profile إذا اسم صفحتك كذا
-  };
+export default function Header({
+  onLogout = () => {},
+  userName = "Student User",
+  email = "student@example.com",
+  avatarUrl = "/avatar.png",
+}) {
+  const inRouter = useInRouterContext();
+  const [avatarErr, setAvatarErr] = React.useState(false);
+  const initials = useInitials(userName, email, "ST");
+
+  const Brand = inRouter ? NavLink : (p) => <a {...p} href="/" />;
+  const LinkEl = inRouter
+    ? ({ to, children }) => (
+        <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to={to}>
+          {children}
+        </NavLink>
+      )
+    : ({ to, children }) => (
+        <a className="nav-link" href={to}>
+          {children}
+        </a>
+      );
 
   return (
     <nav className="navbar navbar-expand-lg bg-body-tertiary">
       <div className="container-fluid">
-        <NavLink className="navbar-brand" to="/">
+        <Brand className="navbar-brand" to="/">
           <img src="/Logo.png" alt="Logo" height="70" />
-        </NavLink>
+        </Brand>
 
         <button
           className="navbar-toggler"
           type="button"
           data-bs-toggle="collapse"
-          data-bs-target="#navbarNavAltMarkup"
-          aria-controls="navbarNavAltMarkup"
+          data-bs-target="#navbarNavStudent"
+          aria-controls="navbarNavStudent"
           aria-expanded="false"
           aria-label="Toggle navigation"
         >
-          <span className="navbar-toggler-icon"></span>
+          <span className="navbar-toggler-icon" />
         </button>
 
-        <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
+        <div className="collapse navbar-collapse" id="navbarNavStudent">
           <div className="navbar-nav me-auto">
-            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/">
-              Home
-            </NavLink>
-            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/schedules">
-              Schedules
-            </NavLink>
-            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/personalized">
-              Personalized Schedule
-            </NavLink>
+            <LinkEl to="/">Home</LinkEl>
+            <LinkEl to="/schedules">Schedules</LinkEl>
+            <LinkEl to="/personalized">Personalized Schedule</LinkEl>
+           <LinkEl to="/electives">Electives</LinkEl>
           </div>
 
-          {/* User menu (profile icon + dropdown) */}
           <div className="dropdown">
             <button
               className="btn btn-light d-flex align-items-center gap-2 dropdown-toggle"
               type="button"
-              id="userMenuBtn"
+              id="userMenuStudent"
               data-bs-toggle="dropdown"
               aria-expanded="false"
             >
-              {/* صورة بروفايل أو حروف أولية */}
-              <img
-                src="/avatar.png"        /* بدّليها بصورة المستخدم إن وُجدت */
-                alt="Profile"
-                width="32"
-                height="32"
-                className="rounded-circle border"
-                onError={(e) => {
-                  // fallback إلى دائرة بحرفين
-                  e.currentTarget.style.display = "none";
-                  const fallback = document.getElementById("avatar-fallback");
-                  if (fallback) fallback.style.display = "inline-flex";
-                }}
-              />
-              <span
-                id="avatar-fallback"
-                style={{ display: "none" }}
-                className="rounded-circle bg-secondary text-white fw-semibold d-inline-flex align-items-center justify-content-center"
-              >
-                <span style={{ width: 32, height: 32, lineHeight: "32px", textAlign: "center", fontSize: 12 }}>
-                  ST
+              {!avatarErr ? (
+                <img
+                  src={avatarUrl}
+                  alt="Profile"
+                  width="32"
+                  height="32"
+                  className="rounded-circle border"
+                  onError={() => setAvatarErr(true)}
+                />
+              ) : (
+                <span
+                  className="rounded-circle bg-secondary text-white fw-semibold d-inline-flex align-items-center justify-content-center"
+                  style={{ width: 32, height: 32, fontSize: 12 }}
+                >
+                  {initials}
                 </span>
-              </span>
+              )}
             </button>
 
-            <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuBtn">
-              <li>
-                <button className="dropdown-item" onClick={goProfile}>
-                  View Profile
-                </button>
-              </li>
+            <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuStudent">
+              <li>{inRouter ? <Link className="dropdown-item" to="/account">View Profile</Link> : <a className="dropdown-item" href="/account">View Profile</a>}</li>
               <li><hr className="dropdown-divider" /></li>
-              <li>
-                <button className="dropdown-item text-danger" onClick={onLogout}>
-                  Log out
-                </button>
-              </li>
+              <li><button className="dropdown-item text-danger" onClick={onLogout}>Log out</button></li>
             </ul>
           </div>
-          {/* /User menu */}
         </div>
       </div>
     </nav>

@@ -1,19 +1,15 @@
 // ES module imports
-import pool from '../DataBase_config/DB_config.js'; // include .js
 import express from 'express';
 import cors from 'cors';
-//import ur routes
-import authRoutes from './routes/Authroute.js'; // include .js
-import wlcomeRoute from './routes/welcomeRoute.js'
+
+// routes
+import authRoutes from './routes/Authroute.js';
+import wlcomeRoute from './routes/welcomeRoute.js';
 import FetchDepartments from './routes/FetchDepartments.js';
-import ManageRulesRoutes from './routes/ManageRulesRoute.js'
-/*
-importnt note
-userId: req.user.id,  u use the middleware:verfiy token!!!!!!!
-thats the token in local storage u take and send via axios in ur reqyest header 
-
-*/
-
+import ManageRulesRoutes from './routes/ManageRulesRoute.js';
+import ProfileRoutes from './routes/ProfileRoute.js'; // 👈 جديد
+import coursesRouter from "./routes/courses.js";
+import studentsRouter from "./routes/students.js";
 const app = express();
 
 // Middlewares
@@ -21,10 +17,11 @@ app.use(express.json());
 app.use(cors());
 
 // Use routes
-app.use('/api',FetchDepartments)
-app.use("/auth", authRoutes);
-app.use('/try',wlcomeRoute)
-app.use('/rules',ManageRulesRoutes)
-
-
+app.use('/api', FetchDepartments);
+app.use('/auth', authRoutes);
+app.use('/try', wlcomeRoute);
+app.use('/rules', ManageRulesRoutes);
+app.use('/api', ProfileRoutes); // 👈 يضيف /api/profile/:id (GET/PUT)
+app.use("/courses", coursesRouter);
+app.use("/students", studentsRouter);
 export default app;

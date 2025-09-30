@@ -1,18 +1,44 @@
-import { NavLink, useNavigate } from "react-router-dom";
+// components/TLChome/Header.jsx
+import React from "react";
+import {
+  NavLink,
+  useNavigate,
+  useInRouterContext,
+} from "react-router-dom";
 
-export default function Header({ onLogout }) {
-  const navigate = useNavigate();
+function SafeLink({ to, children, className }) {
+  const inRouter = useInRouterContext();
+  if (inRouter) {
+    return (
+      <NavLink className={className} to={to}>
+        {children}
+      </NavLink>
+    );
+  }
+  // خارج الراوتر: استخدم <a>
+  return (
+    <a className={typeof className === "function" ? "nav-link" : className} href={to}>
+      {children}
+    </a>
+  );
+}
+
+export default function Header({ onLogout = () => {} }) {
+  const inRouter = useInRouterContext();
+  const navigate = inRouter ? useNavigate() : null;
+  const [avatarErr, setAvatarErr] = React.useState(false);
 
   const goProfile = () => {
-    navigate("/account"); // أو "/profile" حسب مسار صفحة البروفايل
+    if (inRouter && navigate) navigate("/account");
+    else window.location.href = "/account"; // fallback خارج الراوتر
   };
 
   return (
     <nav className="navbar navbar-expand-lg bg-body-tertiary">
       <div className="container-fluid">
-        <NavLink className="navbar-brand" to="/">
+        <SafeLink className="navbar-brand" to="/">
           <img src="/Logo.png" alt="Logo" height="70" />
-        </NavLink>
+        </SafeLink>
 
         <button
           className="navbar-toggler"
@@ -28,13 +54,19 @@ export default function Header({ onLogout }) {
 
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
           <div className="navbar-nav me-auto">
-            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/">
+            <SafeLink
+              className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
+              to="/"
+            >
               Home
-            </NavLink>
-           
-            <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to="/schedules">
+            </SafeLink>
+
+            <SafeLink
+              className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
+              to="/schedules"
+            >
               Schedules
-            </NavLink>
+            </SafeLink>
           </div>
 
           {/* Profile dropdown */}
@@ -46,27 +78,23 @@ export default function Header({ onLogout }) {
               data-bs-toggle="dropdown"
               aria-expanded="false"
             >
-              <img
-                src="/avatar.png"
-                alt="Profile"
-                width="32"
-                height="32"
-                className="rounded-circle border"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                  const fallback = document.getElementById("avatar-fallback");
-                  if (fallback) fallback.style.display = "inline-flex";
-                }}
-              />
-              <span
-                id="avatar-fallback"
-                style={{ display: "none" }}
-                className="rounded-circle bg-secondary text-white fw-semibold d-inline-flex align-items-center justify-content-center"
-              >
-                <span style={{ width: 32, height: 32, lineHeight: "32px", textAlign: "center", fontSize: 12 }}>
+              {!avatarErr ? (
+                <img
+                  src="/avatar.png"
+                  alt="Profile"
+                  width="32"
+                  height="32"
+                  className="rounded-circle border"
+                  onError={() => setAvatarErr(true)}
+                />
+              ) : (
+                <span
+                  className="rounded-circle bg-secondary text-white fw-semibold d-inline-flex align-items-center justify-content-center"
+                  style={{ width: 32, height: 32, fontSize: 12 }}
+                >
                   TLC
                 </span>
-              </span>
+              )}
             </button>
 
             <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuBtn">

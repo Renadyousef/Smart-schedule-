@@ -3,12 +3,20 @@ import 'bootstrap/dist/css/bootstrap.min.css';
 import 'bootstrap/dist/js/bootstrap.bundle.min.js';
 import { useState, useEffect, useMemo } from 'react';
 
-import AuthPage      from './components/Auth/AuthPage';
-import RegistrarHome from './components/RegistererHome/Home';   // Home.jsx للـ registrar
-import SC_Home       from './components/SCHome/SC_Home';        // Schedule Committee
-import StudentHome   from './components/StudentHome/StudentHome';
-import TLCHomePage   from './components/TLChome/HomePage';      // Teaching Load Committee
-import InstructorHome from './components/Instructor/InstructorHome'
+import AuthPage       from './components/Auth/AuthPage';
+import RegistrarHome  from './components/RegistererHome/Home';
+import SC_Home        from './components/SCHome/SC_Home';
+import StudentHome    from './components/StudentHome/StudentHome';
+import TLCHomePage    from './components/TLChome/HomePage';
+import InstructorHome from './components/Instructor/InstructorHome';
+
+// ✅ صفحات البروفايل
+import SCProfileEN          from "./components/Profiles/SCProfileEN.jsx"; 
+import RegistrarProfile     from "./components/Profiles/RegistrarProfile.jsx";
+import SCCommitteeProfile   from "./components/Profiles/SCCommitteeProfile.jsx";
+import TLCProfile           from "./components/Profiles/TLCProfile.jsx";
+import InstructorProfile    from "./components/Profiles/InstructorProfile.jsx";
+
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [role, setRole] = useState('');
@@ -20,18 +28,19 @@ function App() {
     setRole(storedRole);
   }, []);
 
-  // خريطة الدور -> الصفحة
+  // الصفحات الرئيسية
   const RoleHome = useMemo(() => {
     const map = {
       registrar: RegistrarHome,
-      sc: SC_Home,            // لاحظي: نخزّن 'Sc' كـ lowercase => 'sc'
+      registerer: RegistrarHome,   // 👈 أضفتها لو مخزّن كذا
+      sc: SC_Home,
       student: StudentHome,
       tlc: TLCHomePage,
+      instructor: InstructorHome,
     };
-    return map[role] || StudentHome; // افتراضيًا: registrar
+    return map[role] || StudentHome;
   }, [role]);
 
-  // تسجيل الخروج
   const handleLogout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('role');
@@ -44,7 +53,6 @@ function App() {
   ) : (
     <AuthPage
       onLogin={() => {
-        // بعد نجاح تسجيل الدخول: نقرأ الدور المخزّن ونحدّث الحالة
         const storedRole = (localStorage.getItem('role') || '').toLowerCase().trim();
         setIsAuthenticated(true);
         setRole(storedRole);

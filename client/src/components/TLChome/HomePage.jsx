@@ -1,21 +1,23 @@
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Header from "./Header";
 import ManageRules from "../ManageSchduling_rules/ManageRules";
+import TLCProfile from "../Profiles/TLCProfile"; // ✅ استيراد البروفايل
 
 export default function HomePage({ onLogout }) {
   return (
     <Router>
+      {/* الهيدر ثابت */}
       <Header onLogout={onLogout} />
 
       <Routes>
-        {/* Home route (default when you log in) */}
+        {/* الصفحة الرئيسية */}
         <Route path="/" element={<h1>Welcome to the Home Page TLC</h1>} />
 
-        {/* Manage scheduling rules page */}
+        {/* صفحة القواعد */}
         <Route path="/manage" element={<ManageRules />} />
 
-        {/* You can add other routes later like schedules */}
-        {/* <Route path="/schedules" element={<Schedules />} /> */}
+        {/* صفحة البروفايل */}
+        <Route path="/account" element={<TLCProfile />} />
       </Routes>
     </Router>
   );
