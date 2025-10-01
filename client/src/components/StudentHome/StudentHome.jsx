@@ -28,7 +28,6 @@ export default function StudentHome({ onLogout }) {
         {/* الحساب / البروفايل */}
         <Route path="/account" element={<SCProfileEN />} />
 
-        {/* الاختيارات (يدعم small/capital) */}
         <Route path="/electives" element={<ElectivePreferences />} />
       </Routes>
 

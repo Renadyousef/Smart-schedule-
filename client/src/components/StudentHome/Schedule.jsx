@@ -52,20 +52,18 @@ const SLOT_STARTS = SLOT_PARTS.map((p) => p.s);
 function rowsToSchedule(rows) {
   const out = {};
   for (const r of rows || []) {
-    const day = titleCaseDay(r.DayOfWeek);
+    const day = titleCaseDay(r.DayOfWeek || r.day_of_week || r.day);
     if (!DAYS.includes(day)) continue;
-    if (!r.StartTime || !r.EndTime) continue;
 
-    const startHM = String(r.StartTime).slice(0, 5);
-    const endHM = String(r.EndTime).slice(0, 5);
-    if (startHM.startsWith("12:")) continue;
+    const startHM = String(r.StartTime || r.start_time).slice(0, 5);
+    const endHM = String(r.EndTime || r.end_time).slice(0, 5);
+    if (!startHM || !endHM || startHM.startsWith("12:")) continue;
 
     const startIdx = SLOT_STARTS.indexOf(startHM);
     if (startIdx === -1) continue;
 
     const sameEnd = SLOT_PARTS[startIdx].e;
     const nextEnd = SLOT_PARTS[startIdx + 1]?.e;
-
     let duration = 1;
     if (endHM === sameEnd) duration = 1;
     else if (nextEnd && endHM === nextEnd) duration = 2;
@@ -84,11 +82,39 @@ function rowsToSchedule(rows) {
   return out;
 }
 
+// لتجميع صفوف (All Levels) حسب ScheduleID ومعرفة level إن وجد
+function groupRowsBySchedule(rows) {
+  const grouped = {};
+  for (const row of rows || []) {
+    const sid = row.ScheduleID;
+    if (sid == null) continue;
+    const level = row.Level ?? row.level ?? row.sch_level ?? row.schedule_level ?? "?";
+    if (!grouped[sid]) grouped[sid] = { scheduleId: sid, level, rows: [] };
+    grouped[sid].rows.push(row);
+  }
+  return Object.values(grouped).sort((a, b) => {
+    const la = Number(a.level), lb = Number(b.level);
+    if (!Number.isNaN(la) && !Number.isNaN(lb) && la !== lb) return la - lb;
+    return a.scheduleId - b.scheduleId;
+  });
+}
+
 export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
-  const [showModal, setShowModal] = useState(false);
-  const [schedule, setSchedule] = useState({});
+  const [scheduleGrid, setScheduleGrid] = useState({});
+  const [scheduleIdCurrent, setScheduleIdCurrent] = useState(null);
+  const [levelCurrent, setLevelCurrent] = useState(null);
+
+  // All Levels: مجموعة الجداول + مؤشر الحالي
+  const [allSchedules, setAllSchedules] = useState([]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [flash, setFlash] = useState({ type: "", msg: "" });
+  const [viewMode, setViewMode] = useState("your"); // "your" | "all"
 
   useEffect(() => {
     async function run() {
@@ -100,75 +126,225 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         let user;
         try { user = JSON.parse(userRaw); } catch { throw new Error("Corrupted user in localStorage"); }
 
-        const level = user?.Level ?? user?.level;
-        if (!level && level !== 0) throw new Error("No level found in localStorage");
-
-        const url = new URL("/api/sections/courses-by-level", apiBase);
-        url.searchParams.set("level", String(level));
-        url.searchParams.set("status", "draft");     
-        url.searchParams.set("includeSlots", "1");
+        const myLevel = user?.Level ?? user?.level;
+        if (!myLevel && myLevel !== 0) throw new Error("No level found in localStorage");
 
         const token = localStorage.getItem("token");
-        const res = await fetch(url.toString(), {
-          headers: {
-            "Content-Type": "application/json",
-            ...(token ? { Authorization: `Bearer ${token}` } : {}),
-          },
-        });
 
-        if (!res.ok) {
-          const j = await res.json().catch(() => ({}));
-          throw new Error(j.error || `HTTP ${res.status}`);
+        // helper: fetch level schedule
+        const fetchLevel = async (level) => {
+          const url = new URL("/api/sections/courses-by-level", apiBase);
+          url.searchParams.set("level", String(level));
+          url.searchParams.set("status", "draft");
+          url.searchParams.set("includeSlots", "1");
+          const res = await fetch(url.toString(), {
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+          });
+          const payload = await res.json().catch(() => ({}));
+          if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
+          return payload;
+        };
+
+        if (viewMode === "your") {
+          const payload = await fetchLevel(myLevel);
+
+          const inferredScheduleId =
+            payload?.scheduleId ??
+            payload?.ScheduleID ??
+            payload?.schedule_id ??
+            payload?.rows?.[0]?.ScheduleID ??
+            payload?.rows?.[0]?.schedule_id ??
+            payload?.rows?.[0]?.scheduleId ??
+            null;
+
+          setScheduleIdCurrent(inferredScheduleId);
+          setLevelCurrent(myLevel);
+          setAllSchedules([]);
+          setCurrentIndex(0);
+          setScheduleGrid(rowsToSchedule(payload.rows));
+        } else {
+          // All Levels: fetch لكل مستوى 1..8
+          const levels = [1,2,3,4,5,6,7,8];
+          const results = await Promise.allSettled(levels.map((lv) => fetchLevel(lv)));
+
+          const collected = [];
+          results.forEach((r, i) => {
+            if (r.status !== "fulfilled") return;
+            const payload = r.value;
+            const grouped = groupRowsBySchedule(payload.rows || []);
+            grouped.forEach(g => {
+              if (g.level === "?" || g.level == null) g.level = levels[i];
+              collected.push(g);
+            });
+          });
+
+          if (collected.length === 0) {
+            setAllSchedules([]);
+            setCurrentIndex(0);
+            setScheduleIdCurrent(null);
+            setLevelCurrent(null);
+            setScheduleGrid({});
+          } else {
+            collected.sort((a,b) => {
+              const la = Number(a.level), lb = Number(b.level);
+              if (la !== lb) return la - lb;
+              return a.scheduleId - b.scheduleId;
+            });
+            setAllSchedules(collected);
+            setCurrentIndex(0);
+            setScheduleIdCurrent(collected[0].scheduleId);
+            setLevelCurrent(collected[0].level);
+            setScheduleGrid(rowsToSchedule(collected[0].rows));
+          }
         }
-
-        const data = await res.json();
-        setSchedule(rowsToSchedule(data.rows));
       } catch (e) {
         setErr(e.message || "Failed to load schedule");
-        setSchedule({});
+        setScheduleGrid({});
+        setScheduleIdCurrent(null);
+        setLevelCurrent(null);
+        setAllSchedules([]);
+        setCurrentIndex(0);
       } finally {
         setLoading(false);
       }
     }
     run();
-  }, [apiBase]);
+  }, [apiBase, viewMode]);
 
-  const skip = useMemo(() => ({}), []);
+  // تبديل جدول معيّن من allSchedules
+  function showScheduleAt(idx) {
+    if (idx < 0 || idx >= allSchedules.length) return;
+    const it = allSchedules[idx];
+    setCurrentIndex(idx);
+    setScheduleIdCurrent(it.scheduleId);
+    setLevelCurrent(it.level);
+    setScheduleGrid(rowsToSchedule(it.rows));
+  }
+
+  function goNext() {
+    if (allSchedules.length === 0) return;
+    const next = (currentIndex + 1) % allSchedules.length;
+    showScheduleAt(next);
+  }
+  function goPrev() {
+    if (allSchedules.length === 0) return;
+    const prev = (currentIndex - 1 + allSchedules.length) % allSchedules.length;
+    showScheduleAt(prev);
+  }
+
+  const skip = useMemo(() => ({}), [scheduleGrid]);
+
+  async function submitFeedback() {
+    setSubmitting(true);
+    setFlash({ type: "", msg: "" });
+    try {
+      const token = localStorage.getItem("token");
+      const userRaw = localStorage.getItem("user");
+      const user = userRaw ? JSON.parse(userRaw) : {};
+      const userId = user?.id ?? user?._id ?? user?.UserID ?? user?.StudentID ?? null;
+      const role = user?.role || user?.Role || user?.userRole || (user?.isAdmin ? "admin" : "student");
+
+      if (!token) throw new Error("Missing auth token");
+      if (!userId) throw new Error("Missing user id");
+      if (!scheduleIdCurrent) throw new Error("Missing schedule id");
+      if (!comment.trim()) throw new Error("Write your feedback first");
+
+      const res = await fetch(`${apiBase}/api/feedback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({
+          comment: comment.trim(),
+          scheduleId: scheduleIdCurrent,
+          courseId: null,
+          role,
+          userId,
+        }),
+      });
+
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+      setFlash({ type: "success", msg: "Feedback submitted successfully." });
+      setShowModal(false);
+      setComment("");
+    } catch (e) {
+      setFlash({ type: "danger", msg: e.message || "Failed to submit feedback." });
+    } finally {
+      setSubmitting(false);
+      setTimeout(() => setFlash({ type: "", msg: "" }), 4000);
+    }
+  }
 
   return (
     <div className="container my-4">
- <style>{`
-  .table-fixed { 
-    table-layout: fixed; width: 100%; 
-    border-collapse: separate; border-spacing: 5px; 
-  }
-  th, td { 
-    text-align: center; vertical-align: middle; 
-    height: 70px; border: 1px solid #dee2e6; 
-    border-radius: 10px; padding: 0; overflow: hidden; 
-  }
-  .subject-box { 
-    width: 100%; height: 100%; display: flex; 
-    flex-direction: column; align-items: center; 
-    justify-content: center; font-weight: 600; 
-    font-size: 0.9rem; 
-  }
-  .room { font-size: 0.75rem; color: #333; }
-  .legend-box { display: inline-flex; align-items: center; margin: 0 10px; }
-  .legend-color { width: 18px; height: 18px; border-radius: 4px; margin-right: 6px; border: 1px solid #ccc; }
-  .btn-feedback { background-color: #cce5ff; border: none; border-radius: 30px; padding: 14px 40px; font-weight: 600; font-size: 1.1rem; color: #000; }
-  .btn-feedback:hover { background-color: #99ccff; }
-`}</style>
+      <style>{`
+        .view-dropdown .btn { background:#f7f9fc;border:1px solid #e1e6ef;border-radius:999px;color:#0b3a67;font-weight:700;padding:8px 14px; }
+        .view-dropdown .btn:focus,.view-dropdown .btn.show { box-shadow:0 0 0 3px rgba(188,212,255,.35); border-color:#bcd4ff; }
+        .view-dropdown .dropdown-menu { border-radius:12px; border:1px solid #e1e6ef; box-shadow:0 8px 24px rgba(16,24,40,.08); }
+        .view-item { display:flex; align-items:center; gap:10px; padding:8px 12px; }
+        .view-item .title { font-weight:700; color:#0b3a67; }
+        .view-item .desc { font-size:.82rem; color:#5b6b7a; }
+        .view-item .check { margin-left:auto; opacity:.9; }
 
+        .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; }
+        th,td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden; }
+        .subject-box { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; font-size:.9rem; }
+        .room { font-size:.75rem; color:#333; }
 
-      <h2 className="text-center mb-2">Preliminary Schedule</h2>
+        .legend-box { display:inline-flex; align-items:center; gap:8px; margin:0 10px; font-size:.9rem; font-weight:600; color:#333; }
+        .legend-color { width:20px; height:20px; border-radius:6px; border:1px solid #bbb; }
+
+        .btn-feedback { background-color:#e9f2ff; border:none; border-radius:30px; padding:14px 40px; font-weight:700; font-size:1.05rem; color:#0b3a67; }
+        .btn-feedback:hover { background-color:#cce5ff; }
+
+        .pager { gap:10px; }
+      `}</style>
+
+      {/* Dropdown */}
+      <div className="d-flex justify-content-between align-items-center mb-3">
+        <div className="view-dropdown dropdown">
+          <button className="btn dropdown-toggle" type="button" id="viewDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+            {viewMode === "your" ? "Your Level Schedule" : "All Levels Schedules"}
+          </button>
+          <ul className="dropdown-menu" aria-labelledby="viewDropdown">
+            <li>
+              <button className="dropdown-item view-item" onClick={() => setViewMode("your")}>
+                <span><div className="title">Your Level Schedule</div><div className="desc">Based on your profile level</div></span>
+                {viewMode === "your" && <span className="check">✓</span>}
+              </button>
+            </li>
+            <li><hr className="dropdown-divider" /></li>
+            <li>
+              <button className="dropdown-item view-item" onClick={() => setViewMode("all")}>
+                <span><div className="title">All Levels Schedules</div><div className="desc">Browse one level at a time</div></span>
+                {viewMode === "all" && <span className="check">✓</span>}
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
+
+      {/* العنوان */}
+      <h2 className="text-center mb-1">Preliminary Schedule</h2>
       <p className="text-center text-muted mb-3">
         This is a preliminary schedule. Please provide your feedback if you have any notes.
       </p>
 
+      {/* في All Levels: نعرض المستوى فقط بدون Schedule ID */}
+      {viewMode === "all" && levelCurrent != null && (
+        <div className="text-center mb-2">
+          <h5 className="mb-0">Level {String(levelCurrent)}</h5>
+        </div>
+      )}
+
+      {flash.msg && <div className={`alert ${flash.type === "success" ? "alert-primary" : "alert-danger"} text-center`} role="alert">{flash.msg}</div>}
       {loading && <div className="alert alert-info text-center">Loading…</div>}
       {err && !loading && <div className="alert alert-danger text-center">{err}</div>}
 
+      {/* الجدول */}
       <table className="table-fixed">
         <thead>
           <tr>
@@ -186,7 +362,7 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
                 const key = `${day}#${ti}`;
                 if (skip[key]) return null;
 
-                const slot = schedule?.[day]?.[time];
+                const slot = scheduleGrid?.[day]?.[time];
                 if (!slot) return <td key={day}></td>;
 
                 const bg = colorOf(slot.type);
@@ -213,66 +389,66 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         </tbody>
       </table>
 
-      <div className="text-center mt-3">
-        <button className="btn btn-feedback" onClick={() => setShowModal(true)}>Give Feedback</button>
+      {/* Legend */}
+      <div className="d-flex justify-content-center align-items-center mt-4 flex-wrap gap-3">
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div><span>Core / Mandatory</span></div>
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.elective }}></div><span>Elective</span></div>
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div><span>Lab</span></div>
       </div>
 
+      {/* زر الفيدباك — مخفي في All Levels */}
+      {viewMode === "your" && (
+        <div className="text-center mt-3">
+          <button
+            className="btn btn-feedback"
+            onClick={() => setShowModal(true)}
+            disabled={!scheduleIdCurrent}
+            title={!scheduleIdCurrent ? "Schedule ID is missing" : "Give feedback"}
+          >
+            Give Feedback
+          </button>
+        </div>
+      )}
+
+      {/* أزرار Previous/Next — أسفل الصفحة في All Levels فقط */}
+      {viewMode === "all" && allSchedules.length > 0 && (
+        <div className="d-flex justify-content-center pager mt-4">
+          <button className="btn btn-outline-secondary" onClick={goPrev} disabled={allSchedules.length <= 1}>Previous</button>
+          <div className="small text-muted align-self-center mx-2">
+            {currentIndex + 1} / {allSchedules.length}
+          </div>
+          <button className="btn btn-outline-primary" onClick={goNext} disabled={allSchedules.length <= 1}>Next</button>
+        </div>
+      )}
+
+      {/* مودال الفيدباك */}
       {showModal && (
         <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content" style={{ borderRadius: "20px" }}>
-              <div className="modal-header" style={{ background: "#cce5ff", color: "black", borderTopLeftRadius: "20px", borderTopRightRadius: "20px" }}>
+              <div className="modal-header" style={{ background: "#e9f2ff", color: "#0b3a67", borderTopLeftRadius: "20px", borderTopRightRadius: "20px" }}>
                 <h5 className="modal-title">Feedback</h5>
                 <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
               </div>
               <div className="modal-body">
-                <textarea className="form-control" rows={4} placeholder="Your feedback…" />
+                <textarea className="form-control" rows={4} placeholder="Your feedback…" value={comment} onChange={(e) => setComment(e.target.value)} />
+                {!scheduleIdCurrent && <div className="text-danger small mt-2">Schedule ID is missing — please reload.</div>}
               </div>
               <div className="modal-footer d-flex gap-2">
-                {/* زر Cancel */}
-                <button 
-                  className="btn btn-outline-secondary" 
-                  style={{ borderRadius: "12px", padding: "8px 18px", fontWeight: "600" }}
-                  onClick={() => setShowModal(false)}
+                <button className="btn btn-outline-secondary" style={{ borderRadius: "12px", padding: "8px 18px", fontWeight: "600" }} onClick={() => setShowModal(false)} disabled={submitting}>Cancel</button>
+                <button
+                  className="btn"
+                  style={{ backgroundColor: "#e9f2ff", color: "#0b3a67", borderRadius: "12px", padding: "8px 18px", fontWeight: "600", border: "none", opacity: submitting || !comment.trim() || !scheduleIdCurrent ? 0.7 : 1 }}
+                  onClick={submitFeedback}
+                  disabled={submitting || !comment.trim() || !scheduleIdCurrent}
                 >
-                  Cancel
-                </button>
-                
-                {/* زر Submit */}
-                <button 
-                  className="btn" 
-                  style={{ 
-                    backgroundColor: "#cce5ff", 
-                    color: "#0b3a67", 
-                    borderRadius: "12px", 
-                    padding: "8px 18px", 
-                    fontWeight: "600", 
-                    border: "none" 
-                  }}
-                  onClick={() => setShowModal(false)}
-                >
-                  Submit
+                  {submitting ? "Submitting…" : "Submit"}
                 </button>
               </div>
             </div>
           </div>
         </div>
       )}
-
-      <div className="d-flex justify-content-center mt-3">
-        <div className="legend-box">
-          <div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div>
-          Core / Mandatory
-        </div>
-        <div className="legend-box">
-          <div className="legend-color" style={{ backgroundColor: PALETTE.elective }}></div>
-          Elective
-        </div>
-        <div className="legend-box">
-          <div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div>
-          Lab
-        </div>
-      </div>
     </div>
   );
 }

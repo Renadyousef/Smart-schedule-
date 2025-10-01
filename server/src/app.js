@@ -11,7 +11,11 @@ import ProfileRoutes from './routes/ProfileRoute.js'; // 👈 جديد
 import coursesRouter from "./routes/courses.js";
 import studentsRouter from "./routes/students.js";
 import sectionsRoutes from "./routes/sections.routes.js";
+import addirregularRoute from './routes/AddIrregularRoute.js';
+import feedbackRoutes from "./routes/feedback.routes.js";
+// server/src/app.js (أو المكان الرئيسي)
 
+// ...
 
 const app = express();
 
@@ -28,5 +32,8 @@ app.use('/api', ProfileRoutes); // 👈 يضيف /api/profile/:id (GET/PUT)
 app.use("/courses", coursesRouter);
 app.use("/students", studentsRouter);
 app.use("/api/sections", sectionsRoutes);
+app.use('/irregular',addirregularRoute)
+app.use("/api/feedback", feedbackRoutes);
+
 
 export default app;
