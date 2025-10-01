@@ -18,6 +18,8 @@ import requestsRoutes from "./routes/CreateRequestsRoutes.js";
 import registrarRequestsRoutes from "./routes/RegistrarRequestsRoutes.js";
 // server/src/app.js (أو المكان الرئيسي)
 
+import ScheduleRoutes from './routes/ScheduleRoutes.js';
+
 // ...
 import OfferElective from './routes/OfferElectivesRoutes.js'
 
@@ -42,5 +44,5 @@ app.use("/api/requests", requestsRoutes);
 // app.use("/api/offer", OfferElective);
 app.use("/api/registrarRequests", registrarRequestsRoutes);
 app.use("/offer",OfferElective)
-
+app.use('/schedule', ScheduleRoutes);
 export default app;
