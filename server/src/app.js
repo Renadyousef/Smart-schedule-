@@ -45,7 +45,6 @@ app.use("/irregular", addIrregularRoute);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/registrarRequests", RegistrarRequestsRoutes);
 
-// IMPORTANT: lowercase path that matches the frontend call
 app.use("/createRequests", CreateRequestsRoutes);
 
 app.use("/offer", OfferElective);
