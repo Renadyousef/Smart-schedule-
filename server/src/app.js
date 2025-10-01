@@ -10,6 +10,9 @@ import ManageRulesRoutes from './routes/ManageRulesRoute.js';
 import ProfileRoutes from './routes/ProfileRoute.js'; // 👈 جديد
 import coursesRouter from "./routes/courses.js";
 import studentsRouter from "./routes/students.js";
+import sectionsRoutes from "./routes/sections.routes.js";
+
+
 const app = express();
 
 // Middlewares
@@ -24,4 +27,6 @@ app.use('/rules', ManageRulesRoutes);
 app.use('/api', ProfileRoutes); // 👈 يضيف /api/profile/:id (GET/PUT)
 app.use("/courses", coursesRouter);
 app.use("/students", studentsRouter);
+app.use("/api/sections", sectionsRoutes);
+
 export default app;

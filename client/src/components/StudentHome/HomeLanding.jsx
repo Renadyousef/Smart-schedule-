@@ -1,7 +1,7 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
-import "bootstrap-icons/font/bootstrap-icons.css";
+
 
 // استخرج أول رقم 1-8 حتى لو كان داخل نص مثل "Level 3"
 function coerceLevelFlexible(val) {

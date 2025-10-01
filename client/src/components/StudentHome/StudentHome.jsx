@@ -5,6 +5,9 @@ import SCProfileEN from "../Profiles/SCProfileEN.jsx"; // بدون هيدر/فو
 import ElectivePreferences from "./ElectivePreferences.jsx";
 import HomeLanding from "./HomeLanding.jsx";
 import Footer from "../Footer/Footer.jsx";
+import FixedSchedule from "./Schedule.jsx";
+
+
 
 export default function StudentHome({ onLogout }) {
   return (
@@ -13,11 +16,11 @@ export default function StudentHome({ onLogout }) {
 
       <Routes>
         {/* الصفحة الرئيسية */}
-           <Route path="/" element={<HomeLanding />} />
-
+        <Route path="/" element={<HomeLanding />} />
 
         {/* الجداول */}
-        <Route path="/schedules" element={<h2>Schedules Page</h2>} />
+     <Route path="/schedule" element={<FixedSchedule />} />
+
 
         {/* الجدول المخصص */}
         <Route path="/personalized" element={<h2>Personalized Schedule Page</h2>} />
@@ -27,9 +30,9 @@ export default function StudentHome({ onLogout }) {
 
         {/* الاختيارات (يدعم small/capital) */}
         <Route path="/electives" element={<ElectivePreferences />} />
-        <Route path="/Electives" element={<ElectivePreferences />} />
       </Routes>
-         <Footer /> {/* ✨ الفوتر هنا يطلع بكل الصفحات */}
+
+      <Footer /> {/* ✨ الفوتر هنا يطلع بكل الصفحات */}
     </Router>
   );
 }

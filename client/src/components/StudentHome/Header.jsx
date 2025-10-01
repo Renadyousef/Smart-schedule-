@@ -58,7 +58,8 @@ export default function Header({
         <div className="collapse navbar-collapse" id="navbarNavStudent">
           <div className="navbar-nav me-auto">
             <LinkEl to="/">Home</LinkEl>
-            <LinkEl to="/schedules">Schedules</LinkEl>
+         <LinkEl to="/schedule">Schedule</LinkEl>
+
             <LinkEl to="/personalized">Personalized Schedule</LinkEl>
            <LinkEl to="/electives">Electives</LinkEl>
           </div>

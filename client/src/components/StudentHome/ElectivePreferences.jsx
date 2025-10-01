@@ -48,28 +48,21 @@ function DraggableCard({ item, index, onDragStart, onDragOver, onDrop, onRemove 
   );
 }
 
-/* ============ History Item ============ */
-function HistoryItem({ item, onRestore }) {
+/* ============ History Item (عرض فقط) ============ */
+function HistoryItem({ item }) {
   const when = new Date(item.created_at);
   const reasons = Array.isArray(item.reasons) ? item.reasons : [];
   const prefs = Array.isArray(item.preferences) ? item.preferences : [];
 
   return (
     <div className="border rounded p-3 mb-2 bg-white shadow-sm">
-      <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
-        <div>
-          <div className="fw-semibold">
-            {when.toLocaleDateString()} — {when.toLocaleTimeString()}
-          </div>
-          <div className="text-muted small">
-            {prefs.length} course(s)
-            {reasons.length ? ` • reasons: ${reasons.join(", ")}` : ""}
-            {item.notes ? ` • note: ${String(item.notes).slice(0,60)}${String(item.notes).length>60?"…":""}` : ""}
-          </div>
-        </div>
-        <button className="btn btn-sm btn-outline-primary" onClick={()=>onRestore(item)}>
-          Restore
-        </button>
+      <div className="fw-semibold">
+        {when.toLocaleDateString()} — {when.toLocaleTimeString()}
+      </div>
+      <div className="text-muted small">
+        {prefs.length} course(s)
+        {reasons.length ? ` • reasons: ${reasons.join(", ")}` : ""}
+        {item.notes ? ` • note: ${String(item.notes).slice(0,60)}${String(item.notes).length>60?"…":""}` : ""}
       </div>
 
       <details className="mt-2">
@@ -117,7 +110,7 @@ export default function ElectivePreferences() {
   const [selectedCode, setSelectedCode] = useState("");
   const [prefs, setPrefs] = useState([]);
 
-  // History
+  // History (عرض فقط)
   const [history, setHistory] = useState([]);
   const [loadingHist, setLoadingHist] = useState(false);
   const [histError, setHistError] = useState("");
@@ -327,45 +320,14 @@ export default function ElectivePreferences() {
         setTimeout(()=>toast.classList.remove("show"), 2200);
       }
 
-      // ✅ فرّغي النموذج بالكامل (يشمل prefs)
+      // فرّغي النموذج بالكامل
       resetAll();
 
-      // refresh history after save
+      // refresh history after save (عرض فقط)
       await fetchHistory(studentId, token);
     } catch (err) {
       console.error(err);
       alert("Failed to save preferences. See console for details.");
-    }
-  };
-
-  // Restore from a history record
-  const handleRestore = (item) => {
-    const prefsArr = Array.isArray(item.preferences) ? item.preferences : [];
-    const reasonsArr = Array.isArray(item.reasons) ? item.reasons : [];
-
-    const sorted = [...prefsArr].sort((a,b)=>(a.order||0)-(b.order||0));
-    setPrefs(sorted.map(p => ({
-      code: p.code,
-      name: p.name,
-      DepartmentID: p.DepartmentID,
-      CourseID: p.CourseID,
-      credit_hours: p.credit_hours,
-      is_external: p.is_external,
-    })));
-
-    setReasons({
-      interest: reasonsArr.includes("interest"),
-      gpa:      reasonsArr.includes("gpa"),
-      easy:     reasonsArr.includes("easy"),
-      schedule: reasonsArr.includes("schedule"),
-    });
-
-    setNotes(item.notes || "");
-    const toast = document.getElementById("submitToast");
-    if (toast) {
-      toast.textContent = "History restored to the form";
-      toast.classList.add("show");
-      setTimeout(()=>toast.classList.remove("show"), 1800);
     }
   };
 
@@ -559,7 +521,7 @@ export default function ElectivePreferences() {
           </div>
         </form>
 
-        {/* History */}
+        {/* History (عرض فقط) */}
         <div className="card border-0 shadow-sm mt-4">
           <div className="card-header bg-white border-0 d-flex align-items-center justify-content-between">
             <h5 className="mb-0 fw-bold text-primary">Submission History</h5>
@@ -571,7 +533,7 @@ export default function ElectivePreferences() {
               <div className="text-muted">No history yet.</div>
             ) : (
               history.map((h) => (
-                <HistoryItem key={h.id} item={h} onRestore={handleRestore} />
+                <HistoryItem key={h.id} item={h} />
               ))
             )}
           </div>
