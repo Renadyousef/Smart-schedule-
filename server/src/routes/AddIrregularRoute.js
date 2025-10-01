@@ -1,10 +1,18 @@
-import { Router } from "express";
-import { addIrregularStudent, getStudentName } from "../controllers/IrregularStudentsController.js";
+import express from "express";
+import {
+  getStudentName,
+  addIrregularStudent,
+  searchStudentsByName,
+} from "../controllers/IrregularStudentsController.js";
 
-const router = Router();
+const router = express.Router();
 
-// لو عندك توكن/صلاحيات للـ registrar، أضف ميدلوير هنا
+// النهايات (بعد mount في app.js):
+// GET  /irregular/students/search
+// GET  /irregular/students/:id
+// POST /irregular
+router.get("/students/search", searchStudentsByName);
 router.get("/students/:id", getStudentName);
-router.post("/irregular", addIrregularStudent);
+router.post("/", addIrregularStudent);
 
 export default router;

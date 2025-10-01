@@ -3,16 +3,19 @@ import express from 'express';
 import cors from 'cors';
 
 // routes
-import authRoutes from './routes/Authroute.js';
-import wlcomeRoute from './routes/welcomeRoute.js';
+import authRoutes from './routes/Authroute.js'; // include .js
+import wlcomeRoute from './routes/welcomeRoute.js'
 import FetchDepartments from './routes/FetchDepartments.js';
-import ManageRulesRoutes from './routes/ManageRulesRoute.js';
+import ManageRulesRoutes from './routes/ManageRulesRoute.js'
 import ProfileRoutes from './routes/ProfileRoute.js'; // 👈 جديد
 import coursesRouter from "./routes/courses.js";
 import studentsRouter from "./routes/students.js";
 import sectionsRoutes from "./routes/sections.routes.js";
-import addirregularRoute from './routes/AddIrregularRoute.js';
 import feedbackRoutes from "./routes/feedback.routes.js";
+import addirregularRoute from './routes/AddIrregularRoute.js'
+import requestsRoutes from "./routes/CreateRequestsRoutes.js";
+// import OfferElective from "./routes/OfferElective.js"
+import registrarRequestsRoutes from "./routes/RegistrarRequestsRoutes.js";
 // server/src/app.js (أو المكان الرئيسي)
 
 // ...
@@ -34,6 +37,8 @@ app.use("/students", studentsRouter);
 app.use("/api/sections", sectionsRoutes);
 app.use('/irregular',addirregularRoute)
 app.use("/api/feedback", feedbackRoutes);
-
+app.use("/api/requests", requestsRoutes);
+// app.use("/api/offer", OfferElective);
+app.use("/api/registrarRequests", registrarRequestsRoutes);
 
 export default app;

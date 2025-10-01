@@ -58,11 +58,16 @@ export default function Header({
         <div className="collapse navbar-collapse" id="navbarNavSC">
           {/* SC links */}
           <div className="navbar-nav me-auto">
-            <LinkEl to="/">Home</LinkEl>
-            <LinkEl to="/manage">Manage scheduling rules</LinkEl>
-            <LinkEl to="/core">Core courses</LinkEl>
-            <LinkEl to="/irregular">Irregular students</LinkEl>
-            <LinkEl to="/start">Start scheduling</LinkEl>
+            <NavLink className="nav-link" to="/">Home</NavLink>
+                        <NavLink className="nav-link" to="/manage">Manage scheduling rules</NavLink>
+                        <NavLink className="nav-link" to="/core">Core courses</NavLink>
+                        <NavLink className="nav-link" to="/irregular">Irregular students</NavLink>
+            
+                        {/* ✅ استبدلي المسار القديم اللي فيه مسافة */}
+                        <NavLink className="nav-link" to="/requests">Requests</NavLink>
+                        <NavLink className="nav-link" to="/requests/new">Create Request</NavLink>
+            
+                        <NavLink className="nav-link" to="/start">Start scheduling</NavLink>
           </div>
 
           <div className="dropdown">

@@ -88,9 +88,10 @@ export default function RegistrarHeader({
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
           {/* روابط الـ Registrar */}
           <div className="navbar-nav me-auto">
-            <NavLink className="nav-link" to="/">Home</NavLink>
-            <NavLink className="nav-link" to="/rules">Rules</NavLink>
-          </div>
+           <NavLink className="nav-link" to="/">Home</NavLink>
+                      <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
+                      <NavLink className="nav-link" to="/registrar/irregular">Irregular Students</NavLink>
+                   </div>
 
           {/* Profile dropdown */}
           <div className="dropdown">

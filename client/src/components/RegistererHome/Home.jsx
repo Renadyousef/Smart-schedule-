@@ -2,8 +2,10 @@
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from "react-router-dom";
 import Header from "./Header";
 import "bootstrap/dist/css/bootstrap.min.css";
+import "bootstrap/dist/js/bootstrap.bundle.min.js";
+// import OfferElective from "../OfferElective/OfferElective";
+// import RegistrarRequests from "./RegistrarRequests.jsx";
 
-// صفحات
 import AddIrregularStudent from "./AddIrregularStudent";
 import RegistrarProfile from "../Profiles/RegistrarProfile.jsx"; // ✅ مهم: استيراد صفحة البروفايل
 
@@ -11,7 +13,7 @@ import RegistrarProfile from "../Profiles/RegistrarProfile.jsx"; // ✅ مهم: 
 function Dashboard() {
   return (
     <div className="container py-4">
-      <h1 className="mb-4"> Dashboard</h1>
+      <h1 className="mb-4"> </h1>
 
       {/* KPIs */}
       <div className="row g-3 mb-4">
@@ -47,16 +49,19 @@ function Dashboard() {
       {/* Quick Actions */}
       <div className="card shadow-sm mb-4">
         <div className="card-body">
-          <h5 className="mb-3">Quick Actions</h5>
-          <div className="d-flex flex-wrap gap-2">
-            <Link to="/registrar/irregular/add" className="btn btn-primary">
-              + Add Irregular Student
-            </Link>
-            <button className="btn btn-outline-primary">Import Previous Courses</button>
-            <button className="btn btn-outline-secondary">Respond to Requests</button>
-            <button className="btn btn-success">Offer New Elective</button>
-          </div>
-        </div>
+                  <h5 className="mb-3">Quick Actions</h5>
+                  <div className="d-flex flex-wrap gap-2">
+                    <Link to="/registrar/irregular/add" className="btn btn-primary">
+                      + Add Irregular Student
+                    </Link>
+        
+                    <Link to="/registrar/requests" className="btn btn-outline-secondary">
+                      Respond to Requests
+                    </Link>
+        
+                    <button className="btn btn-success">Offer New Elective</button>
+                  </div>
+                </div>
       </div>
 
       {/* Lists */}
