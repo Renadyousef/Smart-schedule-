@@ -64,6 +64,7 @@ export default function RegistrarRequests() {
               <option value="pending">pending</option>
               <option value="fulfilled">fulfilled</option>
               <option value="rejected">rejected</option>
+              <option value="failed">failed</option>
             </select>
           </div>
         </div>
@@ -104,6 +105,8 @@ export default function RegistrarRequests() {
                               ? "text-bg-warning"
                               : r.status === "fulfilled"
                               ? "text-bg-success"
+                              : r.status === "failed"
+                              ? "text-bg-danger"
                               : "text-bg-secondary"
                           }`}
                         >
@@ -200,24 +203,24 @@ function RequestDetail({ data, onClose, onUpdated }) {
   );
 }
 
-/* ---------- flexible respond row (no Match column) ---------- */
+/* ---------- flexible respond row ---------- */
 
 function StudentRow({ i, s, fields, reqId, onUpdated }) {
   const [show, setShow] = useState(false);
   const [sending, setSending] = useState(false);
-  const [status, setStatus] = useState("fulfilled");
+  const [status, setStatus] = useState("fulfilled"); // now supports 'failed'
   const [mode, setMode] = useState("auto"); // auto | irregular | elective | custom
 
-  // state for auto (NeededFields)
+  // auto (NeededFields)
   const [autoValues, setAutoValues] = useState(() => Object.fromEntries(fields.map((k) => [k, ""])));
 
-  // state for irregular
-  const [irr, setIrr] = useState({ PreviousLevelCourses: "", Level: "", Note: "" });
+  // irregular
+  const [irr, setIrr] = useState({ PreviousLevelCourses: "", Level: "", Note: "", Replace: false });
 
-  // state for elective
+  // elective (placeholder)
   const [elec, setElec] = useState({ CourseCode: "", SeatCount: "", Note: "" });
 
-  // state for custom key/value list
+  // custom kv
   const [kv, setKv] = useState([{ key: "", value: "" }]);
 
   const submit = async () => {
@@ -236,6 +239,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
           category: "irregular",
           PreviousLevelCourses: courses,
           ...(level !== undefined && !Number.isNaN(level) ? { Level: level } : {}),
+          replace: !!irr.Replace,
           ...(irr.Note ? { Note: irr.Note } : {}),
         };
       } else if (mode === "elective") {
@@ -258,7 +262,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
 
       await axios.post(
         `${API_BASE}/registrarRequests/requests/${reqId}/students/${s.crStudentId}/respond`,
-        { data, status } // fulfilled | pending | rejected
+        { data, status } // fulfilled | pending | rejected | failed
       );
 
       setShow(false);
@@ -286,6 +290,8 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               ? "text-bg-warning"
               : s.status === "fulfilled"
               ? "text-bg-success"
+              : s.status === "failed"
+              ? "text-bg-danger"
               : "text-bg-secondary"
           }`}
         >
@@ -305,9 +311,8 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               <label className="form-label">Response Type</label>
               <select className="form-select" value={mode} onChange={(e) => setMode(e.target.value)}>
                 <option value="auto">Auto (NeededFields)</option>
-                <option value="irregular">Irregular</option>
-                <option value="elective">Elective</option>
-                <option value="custom">Custom (key/value)</option>
+                <option value="irregular">Add Irregular Student</option>
+                <option value="elective">Offer Elective</option>
               </select>
             </div>
 
@@ -339,7 +344,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                     value={irr.PreviousLevelCourses}
                     onChange={(e) => setIrr((p) => ({ ...p, PreviousLevelCourses: e.target.value }))}
                   />
-                  <small className="text-muted">comma/space separated; will be saved as an array.</small>
+                  <small className="text-muted">comma/space separated; saved as unique array (merged by default).</small>
                 </div>
                 <div className="mb-2">
                   <label className="form-label">Level (optional)</label>
@@ -350,6 +355,18 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                     onChange={(e) => setIrr((p) => ({ ...p, Level: e.target.value.replace(/[^\d]/g, "") }))}
                     placeholder="1..12"
                   />
+                </div>
+                <div className="form-check mb-2">
+                  <input
+                    id={`rep-${s.crStudentId}`}
+                    className="form-check-input"
+                    type="checkbox"
+                    checked={irr.Replace}
+                    onChange={(e) => setIrr((p) => ({ ...p, Replace: e.target.checked }))}
+                  />
+                  <label htmlFor={`rep-${s.crStudentId}`} className="form-check-label">
+                    Replace existing courses (instead of merge)
+                  </label>
                 </div>
                 <div className="mb-2">
                   <label className="form-label">Note</label>
@@ -362,7 +379,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               </>
             )}
 
-            {/* elective */}
+            {/* elective (placeholder) */}
             {mode === "elective" && (
               <>
                 <div className="mb-2">
@@ -402,6 +419,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                 <option value="fulfilled">fulfilled</option>
                 <option value="pending">pending</option>
                 <option value="rejected">rejected</option>
+                <option value="failed">failed</option>
               </select>
             </div>
 
