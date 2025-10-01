@@ -53,7 +53,7 @@ export default function OfferElective() {
     try {
       const token = localStorage.getItem("token");
       await axios.post(
-        "http://localhost:5000/offer/submit",
+        "http://localhost:5000/offer/submit", //this is where it goes to SC
         { electives: selectedElectives },
         {
           headers: { Authorization: `Bearer ${token}` },

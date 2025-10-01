@@ -63,7 +63,7 @@ export default function Header({ onLogout = () => {} }) {
 
             <SafeLink
               className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
-              to="/schedules"
+              to="/Schudles"
             >
               Schedules
             </SafeLink>
