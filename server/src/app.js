@@ -19,6 +19,7 @@ import registrarRequestsRoutes from "./routes/RegistrarRequestsRoutes.js";
 // server/src/app.js (أو المكان الرئيسي)
 
 // ...
+import OfferElective from './routes/OfferElectivesRoutes.js'
 
 const app = express();
 
@@ -40,5 +41,6 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/api/requests", requestsRoutes);
 // app.use("/api/offer", OfferElective);
 app.use("/api/registrarRequests", registrarRequestsRoutes);
+app.use("/offer",OfferElective)
 
 export default app;

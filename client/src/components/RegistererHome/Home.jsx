@@ -8,6 +8,7 @@ import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
 import AddIrregularStudent from "./AddIrregularStudent";
 import RegistrarProfile from "../Profiles/RegistrarProfile.jsx"; // ✅ مهم: استيراد صفحة البروفايل
+import OfferElective from "../OfferElective/ViewElectiveRequests.jsx";
 
 /* ======================= Dashboard ======================= */
 function Dashboard() {
@@ -138,13 +139,7 @@ function CommitteeRequests() {
   );
 }
 
-function OfferElectives() {
-  return (
-    <div className="container py-4">
-      <h2>Offer Electives Page</h2>
-    </div>
-  );
-}
+
 
 /* ======================= Home (Router) ======================= */
 export default function Home() {
@@ -155,7 +150,7 @@ export default function Home() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/registrar/irregular" element={<IrregularStudents />} />
         <Route path="/registrar/requests" element={<CommitteeRequests />} />
-        <Route path="/registrar/electives" element={<OfferElectives />} />
+        <Route path="/registrar/electives" element={<OfferElective />} />
 
         {/* ✅ صفحة البروفايل */}
         <Route path="/account" element={<RegistrarProfile />} />
@@ -163,7 +158,7 @@ export default function Home() {
         {/* صفحة إضافة irregular */}
         <Route path="/registrar/irregular/add" element={<AddIrregularStudent />} />
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* <Route path="/electives" element={} /> */}
       </Routes>
     </Router>
   );
