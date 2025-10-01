@@ -14,7 +14,7 @@ import sectionsRoutes from "./routes/sections.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
 import addIrregularRoute from "./routes/AddIrregularRoute.js";
 import CreateRequestsRoutes from "./routes/CreateRequestsRoutes.js";
-// import ScheduleRoutes from "./routes/ScheduleRoutes.js";
+import ScheduleRoutes from "./routes/ScheduleRoutes.js";
 import OfferElective from "./routes/OfferElectivesRoutes.js";
 import RegistrarRequestsRoutes from "./routes/RegistrarRequestsRoutes.js";
 
@@ -49,6 +49,6 @@ app.use("/registrarRequests", RegistrarRequestsRoutes);
 app.use("/createRequests", CreateRequestsRoutes);
 
 app.use("/offer", OfferElective);
-// app.use("/schedule", ScheduleRoutes);
+app.use("/schedule", ScheduleRoutes);
 
 export default app;
