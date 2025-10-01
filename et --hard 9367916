@@ -1,0 +1,42 @@
+[33m462ce9e[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m Revert "save my local changes"
+[33mefdef1c[m revert
+[33m7312800[m rervert
+[33m2f23718[m Revert "the AddIrregular , header, home"
+[33m5271c5d[m Revert "create request"
+[33mf86db12[m create request
+[33m43c794d[m Tlc viewing schudles
+[33mddf6ece[m view elective by department of registerer to decode what to offer
+[33m3ea87eb[m offer elective
+[33mad6e67d[m new tab offer
+[33m7a4f167[m the AddIrregular , header, home
+[33me64f571[m save my local changes
+[33m9367916[m update
+[33m2cc50f3[m fix: reset elective preferences form after submit
+[33m8dc0415[m update student and profiles
+[33mc8a82d9[m ADD irregular student
+[33m31410fd[m fix env
+[33m61a54b0[m Merge branch 'main' of https://github.com/Renadyousef/Smart-schedule-
+[33m2026a89[m update,delete rules working on SC
+[33m4d0af39[m Update App.jsx, SignUp.jsx, and signup controller
+[33m30a8816[m Add updates across frontend and backend
+[33m4fd4cb2[m all home added
+[33mf818968[m add rule done
+[33m4ebbb2e[m view rules done
+[33m2cbf7c8[m manage rules front end done
+[33mb819783[m use react route
+[33m8f68797[m take the same header and apply ur user spesfic changes
+[33m274d167[m[33m ([m[1;32mTLC-home[m[33m)[m Merge branch 'main' of https://github.com/Renadyousef/Smart-schedule-
+[33m87ca0c0[m departments dynamic fix !
+[33m6bb5e92[m phase 2 submission
+[33mf4d9bb2[m[33m ([m[1;32msession[m[33m)[m Update .gitignore
+[33m01fef53[m Ignore node_modules
+[33m1ac50a1[m session set
+[33m520c429[m login sign up working
+[33m5588f8d[m fix
+[33m5dd9f38[m ui fix
+[33m84ee143[m[33m ([m[1;32mauth_comp[m[33m)[m toggle added
+[33ma9d3ab8[m signup/in frontEnd
+[33m30a5a25[m boot strap avalaible for use
+[33mcdf943b[m connected DB
+[33mfeb2380[m Add files via upload
+[33m5e8aec1[m react/express set up
