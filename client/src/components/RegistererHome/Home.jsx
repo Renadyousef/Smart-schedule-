@@ -10,6 +10,8 @@ import AddIrregularStudent from "./AddIrregularStudent";
 import RegistrarProfile from "../Profiles/RegistrarProfile.jsx"; // ✅ مهم: استيراد صفحة البروفايل
 import OfferElective from "../OfferElective/ViewElectiveRequests.jsx";
 
+import RegistrarRequests from "./RegistrarRequests.jsx";
+
 /* ======================= Dashboard ======================= */
 function Dashboard() {
   return (
@@ -50,19 +52,19 @@ function Dashboard() {
       {/* Quick Actions */}
       <div className="card shadow-sm mb-4">
         <div className="card-body">
-                  <h5 className="mb-3">Quick Actions</h5>
-                  <div className="d-flex flex-wrap gap-2">
-                    <Link to="/registrar/irregular/add" className="btn btn-primary">
-                      + Add Irregular Student
-                    </Link>
-        
-                    <Link to="/registrar/requests" className="btn btn-outline-secondary">
-                      Respond to Requests
-                    </Link>
-        
-                    <button className="btn btn-success">Offer New Elective</button>
-                  </div>
-                </div>
+          <h5 className="mb-3">Quick Actions</h5>
+          <div className="d-flex flex-wrap gap-2">
+            <Link to="/registrar/irregular/add" className="btn btn-primary">
+              + Add Irregular Student
+            </Link>
+
+            <Link to="/registrar/requests" className="btn btn-outline-secondary">
+              Respond to Requests
+            </Link>
+
+            <button className="btn btn-success">Offer New Elective</button>
+          </div>
+        </div>
       </div>
 
       {/* Lists */}
@@ -139,8 +141,6 @@ function CommitteeRequests() {
   );
 }
 
-
-
 /* ======================= Home (Router) ======================= */
 export default function Home() {
   return (
@@ -148,9 +148,15 @@ export default function Home() {
       <Header />
       <Routes>
         <Route path="/" element={<Dashboard />} />
+
         <Route path="/registrar/irregular" element={<IrregularStudents />} />
-        <Route path="/registrar/requests" element={<CommitteeRequests />} />
+        {/* ✅ ADDED: map /registrar/requests to the REAL page */}
+        <Route path="/registrar/requests" element={<RegistrarRequests />} />
+
+        {/* existing placeholder kept (unchanged) */}
         <Route path="/registrar/electives" element={<OfferElective />} />
+        <Route path="/registrar/requests" element={<CommitteeRequests />} />
+        <Route path="requests" element={<RegistrarRequests />} />
 
         {/* ✅ صفحة البروفايل */}
         <Route path="/account" element={<RegistrarProfile />} />

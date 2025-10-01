@@ -2,9 +2,8 @@ import { useMemo, useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 
-const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000"; // ← server root
 
-/* parse: "GPA, advisor" => ["GPA","advisor"] (trim + dedupe, keep order) */
 function parseNeededFields(input) {
   const parts = String(input || "")
     .split(",")
@@ -16,7 +15,6 @@ function parseNeededFields(input) {
   return out;
 }
 
-/* parse names: split by new line OR comma, compress spaces, drop empties, dedupe */
 function parseStudentNames(txt) {
   const parts = String(txt || "")
     .split(/\r?\n|,/g)
@@ -43,20 +41,15 @@ export default function CreateRequest() {
   const fieldsArray = useMemo(() => parseNeededFields(neededFieldsText), [neededFieldsText]);
   const studentsArray = useMemo(() => parseStudentNames(studentNamesText), [studentNamesText]);
 
-  const isValid =
-    title.trim() &&
-    type &&
-    fieldsArray.length > 0 &&
-    studentsArray.length > 0;
+  const isValid = title.trim() && type && fieldsArray.length > 0 && studentsArray.length > 0;
 
   const payload = useMemo(() => ({
     title: title.trim(),
     type,
     level: level ? Number(level) : null,
-    neededFields: fieldsArray,      // server will store as text (comma-separated)
-    studentNames: studentsArray,    // one DB row per name
+    neededFields: fieldsArray,
+    studentNames: studentsArray,
     description: description.trim() || null,
-    // committeeId / registrarId optional: add later if you need
   }), [title, type, level, fieldsArray, studentsArray, description]);
 
   const handleSubmit = async (e) => {
@@ -70,10 +63,9 @@ export default function CreateRequest() {
 
     try {
       setSending(true);
-      // NO custom headers → no preflight headaches when same-origin/proxy
-      const res = await axios.post(`${API_BASE}/CreateRequests/requests`, payload);
-      setOkMsg(`Created successfully. #${res.data?.id ?? ""}`);
-      // reset
+      // IMPORTANT: backend mounts at /createRequests (lowercase)
+      const res = await axios.post(`${API_BASE}/createRequests/requests`, payload);
+      setOkMsg(`Created successfully. #${res?.data?.id ?? ""}`);
       setTitle(""); setType("DataRequest"); setLevel("");
       setNeededFieldsText(""); setStudentNamesText(""); setDescription("");
     } catch (e) {

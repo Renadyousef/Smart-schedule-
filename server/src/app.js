@@ -1,48 +1,54 @@
-// ES module imports
-import express from 'express';
-import cors from 'cors';
+// server/src/app.js
+import express from "express";
+import cors from "cors";
 
 // routes
-import authRoutes from './routes/Authroute.js'; // include .js
-import wlcomeRoute from './routes/welcomeRoute.js'
-import FetchDepartments from './routes/FetchDepartments.js';
-import ManageRulesRoutes from './routes/ManageRulesRoute.js'
-import ProfileRoutes from './routes/ProfileRoute.js'; // 👈 جديد
+import authRoutes from "./routes/Authroute.js";
+import wlcomeRoute from "./routes/welcomeRoute.js";
+import FetchDepartments from "./routes/FetchDepartments.js";
+import ManageRulesRoutes from "./routes/ManageRulesRoute.js";
+import ProfileRoutes from "./routes/ProfileRoute.js";
 import coursesRouter from "./routes/courses.js";
 import studentsRouter from "./routes/students.js";
 import sectionsRoutes from "./routes/sections.routes.js";
 import feedbackRoutes from "./routes/feedback.routes.js";
-import addirregularRoute from './routes/AddIrregularRoute.js'
-import requestsRoutes from "./routes/CreateRequestsRoutes.js";
-// import OfferElective from "./routes/OfferElective.js"
-import registrarRequestsRoutes from "./routes/RegistrarRequestsRoutes.js";
-// server/src/app.js (أو المكان الرئيسي)
-
-import ScheduleRoutes from './routes/ScheduleRoutes.js';
-
-// ...
-import OfferElective from './routes/OfferElectivesRoutes.js'
+import addIrregularRoute from "./routes/AddIrregularRoute.js";
+import CreateRequestsRoutes from "./routes/CreateRequestsRoutes.js";
+// import ScheduleRoutes from "./routes/ScheduleRoutes.js";
+import OfferElective from "./routes/OfferElectivesRoutes.js";
+import RegistrarRequestsRoutes from "./routes/RegistrarRequestsRoutes.js";
 
 const app = express();
 
-// Middlewares
-app.use(express.json());
-app.use(cors());
+// If you serve frontend from Vite on 5173:
+// ✅ اسمحي لأصل Vite (5175) + رؤوس وأوبشنز وبكوكيز إذا احتجتِ
+app.use(cors({
+  origin: ["http://localhost:5175", "http://127.0.0.1:5175"],
+  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true, // خليها true فقط إذا بتستخدمين كوكيز/معرّف جلسة
+}));
 
-// Use routes
-app.use('/api', FetchDepartments);
-app.use('/auth', authRoutes);
-app.use('/try', wlcomeRoute);
-app.use('/rules', ManageRulesRoutes);
-app.use('/api', ProfileRoutes); // 👈 يضيف /api/profile/:id (GET/PUT)
+
+app.use(express.json());
+
+// Mount routes
+app.use("/api", FetchDepartments);
+app.use("/auth", authRoutes);
+app.use("/try", wlcomeRoute);
+app.use("/rules", ManageRulesRoutes);
+app.use("/api", ProfileRoutes);
 app.use("/courses", coursesRouter);
 app.use("/students", studentsRouter);
 app.use("/api/sections", sectionsRoutes);
-app.use('/irregular',addirregularRoute)
+app.use("/irregular", addIrregularRoute);
 app.use("/api/feedback", feedbackRoutes);
-app.use("/api/requests", requestsRoutes);
-// app.use("/api/offer", OfferElective);
-app.use("/api/registrarRequests", registrarRequestsRoutes);
-app.use("/offer",OfferElective)
-app.use('/schedule', ScheduleRoutes);
+app.use("/registrarRequests", RegistrarRequestsRoutes);
+
+// IMPORTANT: lowercase path that matches the frontend call
+app.use("/createRequests", CreateRequestsRoutes);
+
+app.use("/offer", OfferElective);
+// app.use("/schedule", ScheduleRoutes);
+
 export default app;

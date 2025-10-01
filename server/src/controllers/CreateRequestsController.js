@@ -1,30 +1,23 @@
-// server/controllers/CreateRequestsController.js
+// server/src/controllers/CreateRequestsController.js
 import pool from "../../DataBase_config/DB_config.js";
 
 const VALID_TYPES = new Set(["DataRequest", "Confirmation"]);
 
 function normalizeNeededFields(neededFields) {
-  if (Array.isArray(neededFields)) {
-    return neededFields.map(String).map(s=>s.trim()).filter(Boolean);
-  }
+  if (Array.isArray(neededFields)) return neededFields.map(String).map(s=>s.trim()).filter(Boolean);
   if (neededFields == null) return [];
   return String(neededFields).split(",").map(s=>s.trim()).filter(Boolean);
 }
-
 function normalizeStudentNames(studentNames) {
-  if (Array.isArray(studentNames)) {
-    return studentNames.map(String).map(s=>s.replace(/\s+/g," ").trim()).filter(Boolean);
-  }
+  if (Array.isArray(studentNames)) return studentNames.map(String).map(s=>s.replace(/\s+/g," ").trim()).filter(Boolean);
   if (studentNames == null) return [];
   return String(studentNames).split(/\r?\n|,/).map(s=>s.replace(/\s+/g," ").trim()).filter(Boolean);
 }
-
 function normalizeLevel(level){
   if (level === "" || level == null) return null;
   const n = Number(level);
   return Number.isFinite(n) ? n : null;
 }
-
 function handle500(res, label, err){
   console.error(label, err);
   return res.status(500).json({ error: "Server error", message: err?.message || null });
@@ -33,15 +26,13 @@ function handle500(res, label, err){
 export const createRequest = async (req, res) => {
   const client = await pool.connect();
   try {
-    let {
-      title, type, level, neededFields, studentNames,
-      description = null, committeeId = null, registrarId = null, createdBy = null,
-    } = req.body || {};
+    let { title, type, level, neededFields, studentNames,
+          description = null, committeeId = null, registrarId = null, createdBy = null } = req.body || {};
 
     title = String(title || "").trim();
     type  = String(type  || "").trim();
 
-    const cleanNeededArr = normalizeNeededFields(neededFields); // <-- keep as array
+    const cleanNeededArr = normalizeNeededFields(neededFields);
     const cleanStudents  = normalizeStudentNames(studentNames);
     const cleanLevel     = normalizeLevel(level);
 
@@ -54,7 +45,6 @@ export const createRequest = async (req, res) => {
 
     await client.query("BEGIN");
 
-    // NOTE: NeededFields is text[] in DB → use $4::text[]
     const insReq = `
       INSERT INTO public."CommitteeRequests"
         ("Title","RequestType","Level","NeededFields","Description",
@@ -63,14 +53,8 @@ export const createRequest = async (req, res) => {
       RETURNING "RequestID" AS id;
     `;
     const { rows } = await client.query(insReq, [
-      title,
-      type,
-      cleanLevel,
-      cleanNeededArr,          // <-- pass array, not string
-      description ?? null,
-      createdBy,
-      committeeId ?? null,
-      registrarId ?? null,
+      title, type, cleanLevel, cleanNeededArr, description ?? null,
+      createdBy, committeeId ?? null, registrarId ?? null,
     ]);
     const requestId = rows[0].id;
 
@@ -86,7 +70,7 @@ export const createRequest = async (req, res) => {
     await client.query("COMMIT");
     return res.status(201).json({ id: requestId, committeeId, registrarId });
   } catch (err) {
-    try { await pool.query("ROLLBACK"); } catch {}
+    try { await client.query("ROLLBACK"); } catch {}
     return handle500(res, "createRequest error", err);
   } finally {
     client.release();
@@ -104,7 +88,7 @@ export const getRequests = async (req, res) => {
     const q = `
       SELECT
         "RequestID" AS id, "Title" AS title, "RequestType" AS type, "Level" AS level,
-        "NeededFields" AS "neededFields",  -- this will be text[]
+        "NeededFields" AS "neededFields",
         "Description" AS description, "Status" AS status,
         "CommitteeID" AS "committeeId","RegistrarID" AS "registrarId",
         "CreatedAt" AS "createdAt", "UpdatedAt" AS "updatedAt",
@@ -126,7 +110,7 @@ export const getRequestById = async (req, res) => {
     const head = await pool.query(`
       SELECT
         "RequestID" AS id, "Title" AS title, "RequestType" AS type, "Level" AS level,
-        "NeededFields" AS "neededFields",  -- text[]
+        "NeededFields" AS "neededFields",
         "Description" AS description, "Status" AS status,
         "CommitteeID" AS "committeeId","RegistrarID" AS "registrarId",
         "CreatedAt" AS "createdAt", "UpdatedAt" AS "updatedAt",
