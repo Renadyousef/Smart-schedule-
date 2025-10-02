@@ -44,6 +44,8 @@ export default function Header({ onLogout }) {
              <NavLink className="nav-link" to="/requests">Requests</NavLink>
             <NavLink className="nav-link" to="/requests/new">Create Request</NavLink>
                  <NavLink className="nav-link" to="/Electives/handel">Electives</NavLink>
+              <NavLink className="nav-link" to="/Notification">Notification</NavLink>
+                 {/**Notification */}
           </div>
        
 

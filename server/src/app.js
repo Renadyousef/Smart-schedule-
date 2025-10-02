@@ -17,6 +17,7 @@ import CreateRequestsRoutes from "./routes/CreateRequestsRoutes.js";
 import ScheduleRoutes from "./routes/ScheduleRoutes.js";
 import OfferElective from "./routes/OfferElectivesRoutes.js";
 import RegistrarRequestsRoutes from "./routes/RegistrarRequestsRoutes.js";
+import FetchNotificationRoute from './routes/ScNotificationsRoute.js'
 
 const app = express();
 
@@ -51,5 +52,5 @@ app.use("/createRequests", CreateRequestsRoutes);
 
 app.use("/offer", OfferElective);
 app.use("/schedule", ScheduleRoutes);
-
+app.use('/Notifications',FetchNotificationRoute)//for SC page
 export default app;
