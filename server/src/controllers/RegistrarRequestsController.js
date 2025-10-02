@@ -118,6 +118,51 @@ function sanitizeLineStatus(v) {
   return LINE_STATUS_ALLOWED.has(s) ? s : "fulfilled";
 }
 
+/* ---------- Offer Elective helpers ---------- */
+function isOfferElective(data) {
+  const rt = String(data?.responseType || "").toLowerCase();
+  const cat = String(data?.category || "").toLowerCase();
+  return rt === "offer elective" || rt === "offer_elective" || rt === "offerelective" || cat === "elective";
+}
+
+// Accepts 24h ("HH:MM" or "HH:MM:SS") and 12h ("H:MM AM/PM") and returns "HH:MM:SS"
+function normTime(t) {
+  const s = String(t || "").trim();
+  if (!s) return null;
+
+  let m = s.match(/^(\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (m) return `${m[1]}:${m[2]}:${m[3] ?? "00"}`;
+
+  m = s.match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+  if (m) {
+    let hh = parseInt(m[1], 10);
+    const mm = m[2];
+    const ap = m[3].toUpperCase();
+    if (ap === "PM" && hh !== 12) hh += 12;
+    if (ap === "AM" && hh === 12) hh = 0;
+    return `${String(hh).padStart(2, "0")}:${mm}:00`;
+  }
+
+  return null;
+}
+
+function normDays(days) {
+  if (Array.isArray(days)) return days.map(String).map((d) => d.trim()).filter(Boolean);
+  return String(days ?? "")
+    .split(/[, ]+/g)
+    .map((d) => d.trim())
+    .filter(Boolean);
+}
+
+const toDaysString = (v) => {
+  if (Array.isArray(v)) return v.map(String).map((d) => d.trim()).filter(Boolean).join(",");
+  return String(v || "")
+    .split(/[, ]+/g)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .join(",");
+};
+
 /* -------------------- controllers -------------------- */
 
 /** GET /registrarRequests/requests?status=&registrarId=&committeeId= */
@@ -200,7 +245,7 @@ export const respondForStudent = async (req, res) => {
 
     await client.query("BEGIN");
 
-    // 1) store response JSON + status on the line
+    // 1) store response JSON + status on the line (initial merge)
     await client.query(
       `UPDATE public."CommitteeRequestStudents"
           SET "ResponseData" = COALESCE("ResponseData",'{}'::jsonb) || $1::jsonb,
@@ -217,7 +262,6 @@ export const respondForStudent = async (req, res) => {
         const usersTable = await detectUsersTable(client);
         const hasLL = await hasLastLogin(client, usersTable);
 
-        // If the column exists, require last_login_at != null (same logic as IrregularStudentsController)
         if (hasLL) {
           const u = await client.query(
             `select "last_login_at" from ${usersTable} where "UserID" = $1`,
@@ -227,14 +271,13 @@ export const respondForStudent = async (req, res) => {
             throw new Error("User record not found");
           }
           if (u.rows[0]?.last_login_at == null) {
-            // non-fatal: mark the line failed, roll back irregular write-through but keep the ResponseData
             await client.query(
               `UPDATE public."CommitteeRequestStudents"
                  SET "Status" = 'failed', "RespondedAt" = now()
                WHERE "CRStudentID" = $1 AND "RequestID" = $2`,
               [crStudentId, id]
             );
-            await client.query("ROLLBACK"); // rollback the tx so far
+            await client.query("ROLLBACK");
             return res.status(403).json({
               error:
                 "Student must log in at least once before registrar can add irregular record.",
@@ -243,10 +286,9 @@ export const respondForStudent = async (req, res) => {
         }
 
         const replaceFlag = extractReplaceFlag(data);
-        const courses = extractCourses(data); // normalized []
-        const newLevel = extractLevel(data);  // number|null
+        const courses = extractCourses(data);
+        const newLevel = extractLevel(data);
 
-        // lock current row & get existing courses
         const ex = await client.query(
           `select "PreviousLevelCourses"
              from public."IrregularStudents"
@@ -261,7 +303,7 @@ export const respondForStudent = async (req, res) => {
 
         let finalCourses;
         if (replaceFlag) {
-          finalCourses = courses; // full replace
+          finalCourses = courses;
         } else {
           const seen = new Set();
           finalCourses = [];
@@ -275,7 +317,6 @@ export const respondForStudent = async (req, res) => {
           }
         }
 
-        // upsert irregular row
         await client.query(
           `insert into public."IrregularStudents" ("StudentID","PreviousLevelCourses")
            values ($1,$2::text[])
@@ -284,7 +325,6 @@ export const respondForStudent = async (req, res) => {
           [studentId, finalCourses]
         );
 
-        // optional level update
         if (newLevel !== null) {
           await client.query(
             `update public."Students" set "level" = $2 where "StudentID" = $1`,
@@ -292,6 +332,113 @@ export const respondForStudent = async (req, res) => {
           );
         }
       }
+    }
+
+    /* 2b) Offer Elective write-through — uses your real Offers table */
+    if (isOfferElective(data)) {
+      const offer = data.offer || {};
+      // prefer string course code (e.g., "SWE485"); fall back to numeric ID if you use it
+      const courseCode = String(offer.courseCode || "").replace(/\s+/g, "").toUpperCase();
+      const courseIdFallback = offer.courseId ?? null;
+
+      if (!courseCode && !courseIdFallback) {
+        throw new Error("Offer Elective requires courseCode (preferred) or courseId.");
+      }
+
+      // Resolve DepartmentID of the registrar who owns this request
+      const rq = await client.query(
+        `select "RegistrarID" from public."CommitteeRequests" where "RequestID" = $1`,
+        [id]
+      );
+      if (rq.rowCount === 0) throw new Error("Parent request not found");
+      const registrarId = rq.rows[0].RegistrarID;
+
+      const dep = await client.query(
+        `select "DepartmentID" from public."User" where "UserID" = $1`,
+        [registrarId]
+      );
+      if (dep.rowCount === 0) throw new Error("Registrar user not found");
+      const departmentId = dep.rows[0].DepartmentID;
+
+      const now = new Date();
+
+      const INSERT = `
+        insert into public."Offers"
+          ("CourseID","DepartmentID","OfferedAt","ClassType","Section","Days","StartTime","EndTime","Status")
+        values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+        returning *;
+      `;
+
+      // Lecture
+      if (offer.lecture) {
+        const lec = offer.lecture;
+        if (lec.section && lec.days && lec.start && lec.end) {
+          await client.query(INSERT, [
+            courseCode || courseIdFallback,
+            departmentId,
+            now,
+            "Lecture",
+            Number(lec.section),
+            toDaysString(lec.days),
+            normTime(lec.start),
+            normTime(lec.end),
+            "Offered",
+          ]);
+        }
+      }
+
+      // Tutorial
+      if (offer.tutorial) {
+        const tut = offer.tutorial;
+        if (tut.section && tut.days && tut.start && tut.end) {
+          await client.query(INSERT, [
+            courseCode || courseIdFallback,
+            departmentId,
+            now,
+            "Tutorial",
+            Number(tut.section),
+            toDaysString(tut.days),
+            normTime(tut.start),
+            normTime(tut.end),
+            "Offered",
+          ]);
+        }
+      }
+
+      // Lab (optional)
+      if (offer.labIncluded && offer.lab) {
+        const lab = offer.lab;
+        if (lab.section && lab.days && lab.start && lab.end) {
+          await client.query(INSERT, [
+            courseCode || courseIdFallback,
+            departmentId,
+            now,
+            "Lab",
+            Number(lab.section),
+            toDaysString(lab.days),
+            normTime(lab.start),
+            normTime(lab.end),
+            "Offered",
+          ]);
+        }
+      }
+
+      // keep a brief summary in the response data
+      await client.query(
+        `update public."CommitteeRequestStudents"
+            set "ResponseData" = (coalesce("ResponseData",'{}'::jsonb) || $1::jsonb),
+                "Status" = $2, "RespondedAt" = now()
+          where "CRStudentID"=$3 and "RequestID"=$4`,
+        [
+          JSON.stringify({
+            offerElective: {
+              courseCode: courseCode || null,
+              note: offer.note ?? null,
+            },
+          }),
+          lineStatus, crStudentId, id,
+        ]
+      );
     }
 
     // 3) parent request status when no pending lines remain
@@ -317,7 +464,6 @@ export const respondForStudent = async (req, res) => {
         [id, parentStatus]
       );
     } else {
-      // touch updatedAt
       await client.query(
         `update public."CommitteeRequests" set "UpdatedAt"=now() where "RequestID"=$1`,
         [id]

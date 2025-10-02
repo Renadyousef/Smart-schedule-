@@ -1,20 +1,16 @@
-// server/src/routes/CreateRequestsRoutes.js
-import { Router } from "express";
+import express from "express";
 import {
   createRequest,
   getRequests,
   getRequestById,
 } from "../controllers/CreateRequestsController.js";
 
-const router = Router();
+const router = express.Router();
 
-// POST /createRequests/requests
+// IMPORTANT: do NOT prefix with /createRequests here.
+// The app mounts this router at /createRequests.
 router.post("/requests", createRequest);
-
-// GET /createRequests/requests?status=pending&committeeId=...&registrarId=...
 router.get("/requests", getRequests);
-
-// GET /createRequests/requests/:id
 router.get("/requests/:id", getRequestById);
 
 export default router;

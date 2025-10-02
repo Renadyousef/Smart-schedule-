@@ -53,7 +53,7 @@ export default function RegistrarRequests() {
 
   return (
     <div className="container py-4">
-      <h2 className="mb-3">Registrar Requests</h2>
+      <h2 className="mb-3">Registrar Requests List </h2>
 
       <div className="card mb-3">
         <div className="card-body d-flex gap-3 flex-wrap">
@@ -208,7 +208,7 @@ function RequestDetail({ data, onClose, onUpdated }) {
 function StudentRow({ i, s, fields, reqId, onUpdated }) {
   const [show, setShow] = useState(false);
   const [sending, setSending] = useState(false);
-  const [status, setStatus] = useState("fulfilled"); // now supports 'failed'
+  const [status, setStatus] = useState("fulfilled"); // supports 'failed'
   const [mode, setMode] = useState("auto"); // auto | irregular | elective | custom
 
   // auto (NeededFields)
@@ -217,10 +217,18 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
   // irregular
   const [irr, setIrr] = useState({ PreviousLevelCourses: "", Level: "", Note: "", Replace: false });
 
-  // elective (placeholder)
-  const [elec, setElec] = useState({ CourseCode: "", SeatCount: "", Note: "" });
+  // elective — full UI (lecture/tutorial/lab)
+  const [elec, setElec] = useState({
+    CourseCode: "",
+    SeatCount: "",
+    Note: "",
+    lecture: { section: "", days: "", start: "", end: "" },
+    tutorial: { days: "", start: "", end: "" }, // section auto = lecture+1
+    labIncluded: false,
+    lab: { days: "", start: "", end: "" }, // section auto = lecture+2
+  });
 
-  // custom kv
+  // custom kv (kept)
   const [kv, setKv] = useState([{ key: "", value: "" }]);
 
   const submit = async () => {
@@ -243,12 +251,47 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
           ...(irr.Note ? { Note: irr.Note } : {}),
         };
       } else if (mode === "elective") {
-        const seat = String(elec.SeatCount || "").trim();
+        // build Offer Elective payload for backend
+        const lectureSection = Number(elec.lecture.section || 0);
+        const offer = {
+          courseCode: elec.CourseCode || undefined,
+          seatCount: Number(elec.SeatCount || 0) || undefined,
+          note: elec.Note || undefined,
+          lecture: {
+            section: lectureSection || undefined,
+            days: String(elec.lecture.days || "")
+              .split(/[, ]+/g)
+              .map((x) => x.trim())
+              .filter(Boolean),
+            start: elec.lecture.start || undefined,
+            end: elec.lecture.end || undefined,
+          },
+          tutorial: {
+            section: lectureSection ? lectureSection + 1 : undefined,
+            days: String(elec.tutorial.days || "")
+              .split(/[, ]+/g)
+              .map((x) => x.trim())
+              .filter(Boolean),
+            start: elec.tutorial.start || undefined,
+            end: elec.tutorial.end || undefined,
+          },
+          labIncluded: !!elec.labIncluded,
+          lab: elec.labIncluded
+            ? {
+                section: lectureSection ? lectureSection + 2 : undefined,
+                days: String(elec.lab.days || "")
+                  .split(/[, ]+/g)
+                  .map((x) => x.trim())
+                  .filter(Boolean),
+                start: elec.lab.start || undefined,
+                end: elec.lab.end || undefined,
+              }
+            : undefined,
+        };
+
         data = {
-          category: "elective",
-          ...(elec.CourseCode ? { CourseCode: elec.CourseCode } : {}),
-          ...(seat !== "" ? { SeatCount: Number(seat) } : {}),
-          ...(elec.Note ? { Note: elec.Note } : {}),
+          responseType: "Offer Elective",
+          offer,
         };
       } else {
         const obj = {};
@@ -262,7 +305,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
 
       await axios.post(
         `${API_BASE}/registrarRequests/requests/${reqId}/students/${s.crStudentId}/respond`,
-        { data, status } // fulfilled | pending | rejected | failed
+        { data, status }
       );
 
       setShow(false);
@@ -272,6 +315,15 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
     } finally {
       setSending(false);
     }
+  };
+
+  const onLectSectionChange = (val) => {
+    const n = val.replace(/[^\d]/g, "");
+    setElec((p) => ({
+      ...p,
+      lecture: { ...p.lecture, section: n },
+      // tutorial/lab sections are derived on submit
+    }));
   };
 
   return (
@@ -305,7 +357,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
         </button>
 
         {show && (
-          <div className="border rounded p-3 mt-2" style={{ maxWidth: 520 }}>
+          <div className="border rounded p-3 mt-2" style={{ maxWidth: 560 }}>
             {/* response mode */}
             <div className="mb-2">
               <label className="form-label">Response Type</label>
@@ -313,6 +365,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                 <option value="auto">Auto (NeededFields)</option>
                 <option value="irregular">Add Irregular Student</option>
                 <option value="elective">Offer Elective</option>
+                <option value="custom">Custom JSON</option>
               </select>
             </div>
 
@@ -379,7 +432,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               </>
             )}
 
-            {/* elective (placeholder) */}
+            {/* elective — full UI */}
             {mode === "elective" && (
               <>
                 <div className="mb-2">
@@ -388,8 +441,10 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                     className="form-control"
                     value={elec.CourseCode}
                     onChange={(e) => setElec((p) => ({ ...p, CourseCode: e.target.value }))}
+                    placeholder="e.g., SWE485"
                   />
                 </div>
+
                 <div className="mb-2">
                   <label className="form-label">Seat Count</label>
                   <input
@@ -397,16 +452,137 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                     className="form-control"
                     value={elec.SeatCount}
                     onChange={(e) => setElec((p) => ({ ...p, SeatCount: e.target.value.replace(/[^\d]/g, "") }))}
+                    placeholder="e.g., 35"
                   />
                 </div>
+
                 <div className="mb-2">
                   <label className="form-label">Note</label>
                   <input
                     className="form-control"
                     value={elec.Note}
                     onChange={(e) => setElec((p) => ({ ...p, Note: e.target.value }))}
+                    placeholder="Optional note"
                   />
                 </div>
+
+                <hr className="my-3" />
+                <h6 className="mb-2">Lecture</h6>
+                <div className="mb-2">
+                  <label className="form-label">Section</label>
+                  <input
+                    type="number"
+                    className="form-control"
+                    value={elec.lecture.section}
+                    onChange={(e) => onLectSectionChange(e.target.value)}
+                    placeholder="e.g., 51"
+                  />
+                </div>
+                <div className="mb-2">
+                  <label className="form-label">Days (comma-separated, full day names)</label>
+                  <input
+                    className="form-control"
+                    value={elec.lecture.days}
+                    onChange={(e) => setElec((p) => ({ ...p, lecture: { ...p.lecture, days: e.target.value } }))}
+                    placeholder="Sun, Tue"
+                  />
+                </div>
+                <div className="d-flex gap-2 mb-2">
+                  <input
+                    type="time"
+                    className="form-control"
+                    value={elec.lecture.start}
+                    onChange={(e) => setElec((p) => ({ ...p, lecture: { ...p.lecture, start: e.target.value } }))}
+                  />
+                  <input
+                    type="time"
+                    className="form-control"
+                    value={elec.lecture.end}
+                    onChange={(e) => setElec((p) => ({ ...p, lecture: { ...p.lecture, end: e.target.value } }))}
+                  />
+                </div>
+
+                <hr className="my-3" />
+                <h6 className="mb-2">Tutorial</h6>
+                <div className="mb-2">
+                  <label className="form-label">Section (auto = lecture + 1)</label>
+                  <input type="number" className="form-control" value={Number(elec.lecture.section || 0) + 1 || ""} readOnly />
+                </div>
+                <div className="mb-2">
+                  <label className="form-label">Days</label>
+                  <input
+                    className="form-control"
+                    value={elec.tutorial.days}
+                    onChange={(e) => setElec((p) => ({ ...p, tutorial: { ...p.tutorial, days: e.target.value } }))}
+                    placeholder="Sun, Tue"
+                  />
+                </div>
+                <div className="d-flex gap-2 mb-2">
+                  <input
+                    type="time"
+                    className="form-control"
+                    value={elec.tutorial.start}
+                    onChange={(e) => setElec((p) => ({ ...p, tutorial: { ...p.tutorial, start: e.target.value } }))}
+                  />
+                  <input
+                    type="time"
+                    className="form-control"
+                    value={elec.tutorial.end}
+                    onChange={(e) => setElec((p) => ({ ...p, tutorial: { ...p.tutorial, end: e.target.value } }))}
+                  />
+                </div>
+
+                <hr className="my-3" />
+                <div className="form-check mb-2">
+                  <input
+                    id={`labInc-${s.crStudentId}`}
+                    type="checkbox"
+                    className="form-check-input"
+                    checked={elec.labIncluded}
+                    onChange={(e) => setElec((p) => ({ ...p, labIncluded: e.target.checked }))}
+                  />
+                  <label htmlFor={`labInc-${s.crStudentId}`} className="form-check-label">
+                    Include Lab
+                  </label>
+                </div>
+
+                {elec.labIncluded && (
+                  <>
+                    <h6 className="mb-2">Lab</h6>
+                    <div className="mb-2">
+                      <label className="form-label">Section (auto = lecture + 2)</label>
+                      <input
+                        type="number"
+                        className="form-control"
+                        value={Number(elec.lecture.section || 0) + 2 || ""}
+                        readOnly
+                      />
+                    </div>
+                    <div className="mb-2">
+                      <label className="form-label">Days</label>
+                      <input
+                        className="form-control"
+                        value={elec.lab.days}
+                        onChange={(e) => setElec((p) => ({ ...p, lab: { ...p.lab, days: e.target.value } }))}
+                        placeholder="Thu"
+                      />
+                    </div>
+                    <div className="d-flex gap-2 mb-2">
+                      <input
+                        type="time"
+                        className="form-control"
+                        value={elec.lab.start}
+                        onChange={(e) => setElec((p) => ({ ...p, lab: { ...p.lab, start: e.target.value } }))}
+                      />
+                      <input
+                        type="time"
+                        className="form-control"
+                        value={elec.lab.end}
+                        onChange={(e) => setElec((p) => ({ ...p, lab: { ...p.lab, end: e.target.value } }))}
+                      />
+                    </div>
+                  </>
+                )}
               </>
             )}
 
