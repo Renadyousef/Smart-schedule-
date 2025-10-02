@@ -41,8 +41,8 @@ export default function Header({ onLogout }) {
             <LinkEl to="/generated-schedule">Generated Schedule</LinkEl>
             <LinkEl to="/share-schedule">Share Schedule</LinkEl>
             <LinkEl to="/manage">Manage scheduling rules</LinkEl>
-             <NavLink className="nav-link" to="/requests">Requests</NavLink>
-            <NavLink className="nav-link" to="/requests/new">Create Request</NavLink>
+             {/* <NavLink className="nav-link" to="/requests">Requests</NavLink> */}
+              <NavLink className="nav-link" to="/requests/new">Create Request</NavLink>
                  <NavLink className="nav-link" to="/Electives/handel">Electives</NavLink>
               <NavLink className="nav-link" to="/Notification">Notification</NavLink>
                  {/**Notification */}

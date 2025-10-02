@@ -209,7 +209,7 @@ export default function CreateRequest() {
                   <label className="form-label">Needed Fields * (comma-separated)</label>
                   <input
                     className="form-control"
-                    placeholder="GPA, Advisor, CarriedCourses"
+                    placeholder="Update previous Course "
                     value={neededFieldsText}
                     onChange={(e) => setNeededFieldsText(e.target.value)}
                     required
@@ -224,7 +224,7 @@ export default function CreateRequest() {
                   <textarea
                     className="form-control"
                     rows={5}
-                    placeholder={`Noura Al-F.\nRaghad Ahmad\n...`}
+                    placeholder={`Noura salm.\nRaghad Ahmad\n...`}
                     value={studentNamesText}
                     onChange={(e) => setStudentNamesText(e.target.value)}
                     required
