@@ -32,6 +32,10 @@ export default function FixedSchedule() {
   const [subjectFilter, setSubjectFilter] = useState("");
   const [approving, setApproving] = useState(false);
 
+  const [showModal, setShowModal] = useState(false);
+  const [comment, setComment] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
   const [scheduleGrid, setScheduleGrid] = useState({}); // empty table initially
 
   const filteredScheduleGrid = useMemo(() => {
@@ -59,6 +63,16 @@ export default function FixedSchedule() {
     }, 500);
   };
 
+  const submitFeedback = () => {
+    setSubmitting(true);
+    setTimeout(() => {
+      alert(`Feedback submitted: ${comment}`);
+      setSubmitting(false);
+      setShowModal(false);
+      setComment("");
+    }, 500);
+  };
+
   return (
     <div className="container my-4">
       <style>{`
@@ -66,6 +80,8 @@ export default function FixedSchedule() {
         th, td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden; }
         .subject-box { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; font-size:.9rem; }
         .room { font-size:.75rem; color:#333; }
+        .btn-feedback { background-color:#e9f2ff; border:none; border-radius:30px; padding:14px 40px; font-weight:700; font-size:1.05rem; color:#0b3a67; }
+        .btn-feedback:hover { background-color:#cce5ff; }
       `}</style>
 
       {/* Filters + Approve */}
@@ -155,6 +171,62 @@ export default function FixedSchedule() {
           ))}
         </tbody>
       </table>
+
+      {/* Feedback Modal Trigger */}
+      <div className="text-center mt-3">
+        <button className="btn-feedback" onClick={() => setShowModal(true)}>
+          Give Feedback
+        </button>
+      </div>
+
+      {/* Feedback Modal */}
+      {showModal && (
+        <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content" style={{ borderRadius: "20px" }}>
+              <div className="modal-header" style={{ background: "#e9f2ff", color: "#0b3a67", borderTopLeftRadius: "20px", borderTopRightRadius: "20px" }}>
+                <h5 className="modal-title">Feedback</h5>
+                <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
+              </div>
+              <div className="modal-body">
+                <textarea
+                  className="form-control"
+                  rows={4}
+                  placeholder="Your feedback…"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
+              </div>
+              <div className="modal-footer d-flex gap-2">
+                <button
+                  className="btn btn-outline-secondary"
+                  style={{ borderRadius: "12px", padding: "8px 18px", fontWeight: "600" }}
+                  onClick={() => setShowModal(false)}
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="btn"
+                  style={{
+                    backgroundColor: "#e9f2ff",
+                    color: "#0b3a67",
+                    borderRadius: "12px",
+                    padding: "8px 18px",
+                    fontWeight: "600",
+                    border: "none",
+                    opacity: submitting || !comment.trim() ? 0.7 : 1
+                  }}
+                  onClick={submitFeedback}
+                  disabled={submitting || !comment.trim()}
+                >
+                  {submitting ? "Submitting…" : "Submit"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
