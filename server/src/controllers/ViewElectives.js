@@ -33,7 +33,7 @@ export const view_electives = async (req, res) => {
         typeof row.preferences === "string"
           ? JSON.parse(row.preferences)
           : row.preferences || [];
-
+//getting the top picked by count
       for (const pref of preferences) {
         if (pref.DepartmentID === registrarDepId) {
           const key = pref.CourseID;
@@ -51,7 +51,7 @@ export const view_electives = async (req, res) => {
       }
     }
 
-    // 4. Convert to array and sort by popularity
+    // 4. Convert to array and sort by popularity top picked by students?
     const results = Object.values(counts).sort((a, b) => b.count - a.count);
 
     return res.json({ departmentId: registrarDepId, electives: results });
