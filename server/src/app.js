@@ -22,12 +22,14 @@ const app = express();
 
 // If you serve frontend from Vite on 5173:
 // ✅ اسمحي لأصل Vite (5175) + رؤوس وأوبشنز وبكوكيز إذا احتجتِ
-app.use(cors({
-  origin: ["http://localhost:5175", "http://127.0.0.1:5175"],
-  methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true, // خليها true فقط إذا بتستخدمين كوكيز/معرّف جلسة
-}));
+// app.use(cors({
+//   origin: ["http://localhost:5175", "http://127.0.0.1:5175"],//chabged ports
+//   methods: ["GET","POST","PUT","PATCH","DELETE","OPTIONS"],
+//   allowedHeaders: ["Content-Type", "Authorization"],
+//   credentials: true, // خليها true فقط إذا بتستخدمين كوكيز/معرّف جلسة
+// }));
+app.use(cors());//!for dev accept all port in deployment we have to spesfiy
+
 
 
 app.use(express.json());

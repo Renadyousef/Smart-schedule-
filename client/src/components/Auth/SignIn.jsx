@@ -87,7 +87,7 @@ export default function SignIn({ onLogin }) {
       console.error("Signin error:", err);
 
       if (err?.code === "ERR_NETWORK") {
-        alert("Network error: Could not connect to backend. تأكدي أن السيرفر شغال على http://localhost:5000");
+        alert("Network error: Could not connect to backend. تأكدي أن السيرفر شغال على http://localhost:5000");//err occcuers here
         return;
       }
 
