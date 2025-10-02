@@ -3,13 +3,10 @@ import { BrowserRouter as Router, Routes, Route, Navigate, Link } from "react-ro
 import Header from "./Header";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
-// import OfferElective from "../OfferElective/OfferElective";
-// import RegistrarRequests from "./RegistrarRequests.jsx";
 
 import AddIrregularStudent from "./AddIrregularStudent";
-import RegistrarProfile from "../Profiles/RegistrarProfile.jsx"; // ✅ مهم: استيراد صفحة البروفايل
+import RegistrarProfile from "../Profiles/RegistrarProfile.jsx";
 import OfferElective from "../OfferElective/ViewElectiveRequests.jsx";
-
 import RegistrarRequests from "./RegistrarRequests.jsx";
 
 /* ======================= Dashboard ======================= */
@@ -147,24 +144,29 @@ export default function Home() {
     <Router>
       <Header />
       <Routes>
+        {/* صفحة البداية (Home) */}
         <Route path="/" element={<Dashboard />} />
 
+        {/* لو دخل المستخدم على /registrar نرجّعه لـ / (Dashboard) */}
+        <Route path="/registrar" element={<Navigate to="/" replace />} />
+
+        {/* الصفحات */}
         <Route path="/registrar/irregular" element={<IrregularStudents />} />
-        {/* ✅ ADDED: map /registrar/requests to the REAL page */}
+        <Route path="/registrar/irregular/add" element={<AddIrregularStudent />} />
         <Route path="/registrar/requests" element={<RegistrarRequests />} />
-
-        {/* existing placeholder kept (unchanged) */}
         <Route path="/registrar/electives" element={<OfferElective />} />
-        <Route path="/registrar/requests" element={<CommitteeRequests />} />
-        <Route path="requests" element={<RegistrarRequests />} />
 
-        {/* ✅ صفحة البروفايل */}
+        {/* صفحة البروفايل */}
         <Route path="/account" element={<RegistrarProfile />} />
 
-        {/* صفحة إضافة irregular */}
-        <Route path="/registrar/irregular/add" element={<AddIrregularStudent />} />
+        {/* (اختياري) لو في /requests بدون /registrar */}
+        <Route path="/requests" element={<RegistrarRequests />} />
 
-        {/* <Route path="/electives" element={} /> */}
+        {/* ⚠️ إزالة التكرار الذي كان يكتب /registrar/requests مرة ثانية */}
+        {/* <Route path="/registrar/requests" element={<CommitteeRequests />} /> */}
+
+        {/* أي مسار غير معروف → رجوع للـ Home */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 
-
 function initialsFrom(nameLike, fallback = "RG") {
   const s = String(nameLike || "").trim();
   if (!s) return fallback;
@@ -15,13 +14,12 @@ function initialsFrom(nameLike, fallback = "RG") {
 }
 
 export default function RegistrarHeader({
-  onSignOut,                // اختياري
-  redirectAfter = "/signup" // غيّريها إلى "/login" لو تبين
+  onSignOut,
+  redirectAfter = "/signup",
 }) {
-  const navigate = useNavigate();
+  const navigate = useNavigate(); // نتركه كما هو حتى لو ما استخدمناه
   const [showImg, setShowImg] = useState(true);
 
-  // اسم افتراضي للعرض لو موجود في التخزين
   const displayName = useMemo(
     () =>
       localStorage.getItem("fullName") ||
@@ -32,37 +30,29 @@ export default function RegistrarHeader({
   );
   const initials = useMemo(() => initialsFrom(displayName, "RG"), [displayName]);
 
-  const goProfile = () => navigate("/account"); // أو "/profile"
+  const goProfile = () => navigate("/account");
 
   const handleSignOut = async (e) => {
+    // ننفذ قبل الـ click الافتراضي
     e?.preventDefault?.();
+    e?.stopPropagation?.();
 
     try {
-      // لو عندك API للخروج بمواد (كوكي/سيرفر) نادِه هنا:
       // await axios.post(`${API_BASE}/auth/logout`, {}, { withCredentials: true });
 
-      // نظف التخزين المحلي
       localStorage.removeItem("token");
       localStorage.removeItem("userId");
       localStorage.removeItem("fullName");
       localStorage.removeItem("userName");
       localStorage.removeItem("email");
 
-      // بثّ الخروج لكل التابات (اختياري)
       localStorage.setItem("logout_broadcast", String(Date.now()));
 
-      // شغّل كولباك مخصص لو موجود
       if (typeof onSignOut === "function") {
         await Promise.resolve(onSignOut());
       }
     } finally {
-      // توجيه مضمون + فallback
-      navigate(redirectAfter, { replace: true });
-      setTimeout(() => {
-        if (location.pathname !== redirectAfter) {
-          window.location.assign(redirectAfter);
-        }
-      }, 50);
+      window.location.replace(redirectAfter);
     }
   };
 
@@ -86,14 +76,12 @@ export default function RegistrarHeader({
         </button>
 
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
-          {/* روابط الـ Registrar */}
           <div className="navbar-nav me-auto">
-           <NavLink className="nav-link" to="/">Home</NavLink>
-                      <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
-                      <NavLink className="nav-link" to="/registrar/irregular">Irregular Students</NavLink>
-                   </div>
+            <NavLink className="nav-link" to="/">Home</NavLink>
+            <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
+            <NavLink className="nav-link" to="/registrar/irregular">Irregular Students</NavLink>
+          </div>
 
-          {/* Profile dropdown */}
           <div className="dropdown">
             <button
               className="btn btn-light d-flex align-items-center gap-2 dropdown-toggle"
@@ -129,10 +117,16 @@ export default function RegistrarHeader({
                 </button>
               </li>
               <li><hr className="dropdown-divider" /></li>
+
+              {/* onClickCapture */}
               <li>
-                {/* نستخدم <a> مع preventDefault لضمان العمل داخل dropdown */}
-                <a href={redirectAfter} className="dropdown-item text-danger" onClick={handleSignOut}>
-                  Sign Out
+                <a
+                  href={redirectAfter}
+                  className="dropdown-item text-danger"
+                  onClickCapture={handleSignOut}
+                  onClick={(e) => e.preventDefault()} 
+                >
+                  Log Out
                 </a>
               </li>
             </ul>
