@@ -8,6 +8,7 @@ import InternalCourses from "./InternalCourses.jsx";
 import GeneratedSchedule from "./GeneratedSchedule.jsx";
 import ShareSchedule from "./ShareSchedule.jsx";
 import CreateRequest from "./CreateRequest.jsx";
+import ManageElectives from '../ElectivesSc.jsx'
 
 // صفحة بسيطة للواجهة الرئيسية (بدّليها بما تريدين)
 function SCHomeLanding() {
@@ -33,7 +34,7 @@ export default function SC_Home({ onLogout }) {
         {/* صفحات أخرى */}
         <Route path="/manage" element={<ManageRules />} />
         <Route path="/account" element={<SCCommitteeProfile />} />
-        <Route path="/requests/new" element={<h2>Create Request Page</h2>} />
+        <Route path="/Electives/handel" element={<ManageElectives/>} />
         {/* مسارات قديمة (اختياري إعادة توجيه) */}
         {/* <Route path="/core" element={<Navigate to="/external-courses" replace />} />
         <Route path="/internal" element={<Navigate to="/internal-courses" replace />} />
