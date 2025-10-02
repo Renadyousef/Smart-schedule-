@@ -148,14 +148,7 @@ export default function CreateRequest() {
         </div>
       </form>
 
-      <div className="card shadow-sm mt-4">
-        <div className="card-header bg-light">Preview Payload</div>
-        <div className="card-body">
-          <pre className="mb-0" style={{ whiteSpace: "pre-wrap" }}>
-{JSON.stringify(payload, null, 2)}
-          </pre>
-        </div>
-      </div>
+     
     </div>
   );
 }
