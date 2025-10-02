@@ -62,22 +62,25 @@ export default function CreateRequest() {
     }
 
     try {
-      setSending(true);
-      // IMPORTANT: backend mounts at /createRequests (lowercase)
-      const res = await axios.post(`${API_BASE}/createRequests/requests`, payload);
-      setOkMsg(`Created successfully. #${res?.data?.id ?? ""}`);
-      setTitle(""); setType("DataRequest"); setLevel("");
-      setNeededFieldsText(""); setStudentNamesText(""); setDescription("");
-    } catch (e) {
-      setErrMsg(e?.response?.data?.error || e.message || "Submit failed.");
-    } finally {
-      setSending(false);
-    }
+  setSending(true);
+  const { data } = await axios.post(`${API_BASE}/createRequests/requests`, payload);
+
+  const id = data?.id;
+  setOkMsg("Created successfully");
+  setTimeout(() => setOkMsg(""), 2000); // hide after 2s
+
+  setTitle(""); setType("DataRequest"); setLevel("");
+  setNeededFieldsText(""); setStudentNamesText(""); setDescription("");
+} catch (e) {
+  setErrMsg(e?.response?.data?.error || e.message || "Submit failed.");
+} finally {
+  setSending(false);
+}
   };
 
   return (
     <div className="container py-4">
-      <h2 className="mb-3">Create Data Request (Schedule Committee)</h2>
+      <h2 className="mb-3">Create Data Request </h2>
 
       {okMsg ? <div className="alert alert-success">{okMsg}</div> : null}
       {errMsg ? <div className="alert alert-danger">{errMsg}</div> : null}
