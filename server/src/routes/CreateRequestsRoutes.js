@@ -1,3 +1,4 @@
+// server/src/routes/CreateRequestsRoutes.js
 import express from "express";
 import {
   createRequest,
@@ -7,8 +8,7 @@ import {
 
 const router = express.Router();
 
-// IMPORTANT: do NOT prefix with /createRequests here.
-// The app mounts this router at /createRequests.
+// Mounted at /createRequests by your app.
 router.post("/requests", createRequest);
 router.get("/requests", getRequests);
 router.get("/requests/:id", getRequestById);
