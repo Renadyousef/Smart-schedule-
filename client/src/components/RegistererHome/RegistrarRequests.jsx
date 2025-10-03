@@ -5,6 +5,30 @@ import "bootstrap/dist/css/bootstrap.min.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+/* ---------- tiny helper to show REAL server errors ---------- */
+function formatServerError(e) {
+  const res = e?.response;
+  const data = res?.data || {};
+  const rid = res?.headers?.["x-request-id"] || res?.headers?.["x-request-id".toLowerCase()];
+  const parts = [];
+
+  if (res?.status) parts.push(`HTTP ${res.status}`);
+  if (data.error && data.error !== data.message) parts.push(String(data.error));
+  if (data.message) parts.push(String(data.message));
+  if (data.detail) parts.push(`detail: ${String(data.detail)}`);
+  if (data.hint) parts.push(`hint: ${String(data.hint)}`);
+  if (data.where) parts.push(`where: ${String(data.where)}`);
+  if (data.code) parts.push(`code: ${String(data.code)}`);
+  if (rid) parts.push(`requestId: ${rid}`);
+
+  // Some backends return {errors:[...]} arrays
+  if (Array.isArray(data.errors) && data.errors.length) {
+    parts.push(`errors: ${data.errors.map((x) => (typeof x === "string" ? x : JSON.stringify(x))).join(" | ")}`);
+  }
+
+  return parts.join(" — ") || e?.message || "Server error";
+}
+
 function asArray(v) {
   if (Array.isArray(v)) return v;
   if (v == null) return [];
@@ -28,13 +52,16 @@ export default function RegistrarRequests() {
     return p;
   }, [statusFilter, registrarId]);
 
+  const reloadList = () =>
+    axios
+      .get(`${API_BASE}/registrarRequests/requests`, { params: qparams })
+      .then((r) => setList(r.data || []));
+
   useEffect(() => {
     setErr("");
     setLoading(true);
-    axios
-      .get(`${API_BASE}/registrarRequests/requests`, { params: qparams })
-      .then((r) => setList(r.data || []))
-      .catch((e) => setErr(e.response?.data?.error || e.message || "Load failed."))
+    reloadList()
+      .catch((e) => setErr(formatServerError(e)))
       .finally(() => setLoading(false));
   }, [qparams]);
 
@@ -45,7 +72,7 @@ export default function RegistrarRequests() {
       const { data } = await axios.get(`${API_BASE}/registrarRequests/requests/${id}`);
       setActive(data);
     } catch (e) {
-      setErr(e.response?.data?.error || e.message || "Open failed.");
+      setErr(formatServerError(e));
     } finally {
       setLoadingDetail(false);
     }
@@ -70,7 +97,12 @@ export default function RegistrarRequests() {
         </div>
       </div>
 
-      {err && <div className="alert alert-danger">{err}</div>}
+      {err && (
+        <div className="alert alert-danger">
+          <div className="fw-semibold mb-1">Server error</div>
+          <pre className="mb-0 small text-break">{err}</pre>
+        </div>
+      )}
 
       <div className="card">
         <div className="card-header bg-light">Requests</div>
@@ -134,9 +166,10 @@ export default function RegistrarRequests() {
         <RequestDetail
           data={active}
           onClose={() => setActive(null)}
-          onUpdated={() => {
-            axios.get(`${API_BASE}/registrarRequests/requests/${active.id}`).then((r) => setActive(r.data));
-            axios.get(`${API_BASE}/registrarRequests/requests`, { params: qparams }).then((r) => setList(r.data || []));
+          onUpdated={async () => {
+            const { data } = await axios.get(`${API_BASE}/registrarRequests/requests/${active.id}`);
+            setActive(data);
+            await reloadList();
           }}
         />
       )}
@@ -147,88 +180,235 @@ export default function RegistrarRequests() {
 }
 
 /* ---------- detail & respond ---------- */
-
 function RequestDetail({ data, onClose, onUpdated }) {
   const fields = asArray(data.neededFields);
+  const isElective =
+    String(data.type) === "NewElective" || String(data.type).toLowerCase() === "offer elective";
+
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [err, setErr] = useState("");
+
+  const setStatus = async (status) => {
+    setBusy(true);
+    setMsg("");
+    setErr("");
+    try {
+      await axios.post(`${API_BASE}/registrarRequests/requests/${data.id}/status`, { status });
+      setMsg(`Status updated to ${status}.`);
+      await onUpdated();
+    } catch (e) {
+      setErr(formatServerError(e));
+    } finally {
+      setBusy(false);
+      setTimeout(() => setMsg(""), 2000);
+    }
+  };
+
+  const offerAll = async () => {
+    setBusy(true);
+    setMsg("");
+    setErr("");
+    try {
+      await axios.post(`${API_BASE}/registrarRequests/requests/${data.id}/offer-electives`);
+      setMsg("Electives offered and request marked as fulfilled.");
+      await onUpdated();
+    } catch (e) {
+      setErr(formatServerError(e));
+    } finally {
+      setBusy(false);
+      setTimeout(() => setMsg(""), 2500);
+    }
+  };
+
   return (
     <div className="card mt-4">
       <div className="card-header d-flex justify-content-between align-items-center">
         <div>
           <div className="fw-semibold">{data.title}</div>
           <small className="text-muted">
-            Type: {data.type} · Status: {data.status} · Level: {data.level ?? "-"}
+            Type: {isElective ? "Offer Elective" : data.type} · Status: {data.status} · Level:{" "}
+            {data.level ?? "-"}
           </small>
         </div>
-        <button className="btn btn-outline-secondary btn-sm" onClick={onClose}>
-          Close
-        </button>
-      </div>
-      <div className="card-body">
-        <div className="mb-3">
-          <div className="fw-semibold">Needed Fields</div>
-          <div>{fields.length ? fields.join(", ") : <span className="text-muted">(none)</span>}</div>
-        </div>
+        <div className="d-flex gap-2">
+          {/* actions for all requests */}
+          <button
+            className="btn btn-outline-danger btn-sm"
+            onClick={() => setStatus("rejected")}
+            disabled={busy || data.status !== "pending"}
+            title="Reject request"
+          >
+            Reject
+          </button>
+          <button
+            className="btn btn-outline-success btn-sm"
+            onClick={() => setStatus("fulfilled")}
+            disabled={busy || data.status !== "pending"}
+            title="Approve request"
+          >
+            Approve
+          </button>
 
-        <div className="table-responsive">
-          <table className="table table-sm align-middle">
-            <thead>
-              <tr>
-                <th>#</th>
-                <th>Student Name</th>
-                <th>Status</th>
-                <th>Respond</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.students?.map((s, i) => (
-                <StudentRow
-                  key={s.crStudentId}
-                  i={i}
-                  s={s}
-                  fields={fields}
-                  reqId={data.id}
-                  onUpdated={onUpdated}
-                />
-              ))}
-              {(!data.students || data.students.length === 0) && (
-                <tr>
-                  <td colSpan={4} className="text-muted">No students.</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
+          {/* extra action for elective requests */}
+          {isElective && (
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={offerAll}
+              disabled={busy || data.status !== "pending" || (data.electives?.length ?? 0) === 0}
+              title="Add (offer) all electives to Offers and mark request as fulfilled"
+            >
+              Add to Offers
+            </button>
+          )}
+
+          <button className="btn btn-outline-secondary btn-sm" onClick={onClose}>
+            Close
+          </button>
         </div>
+      </div>
+
+      {msg && <div className="alert alert-success m-3 py-2">{msg}</div>}
+      {err && (
+        <div className="alert alert-danger m-3 py-2">
+          <div className="fw-semibold mb-1">Server error</div>
+          <pre className="mb-0 small text-break">{err}</pre>
+        </div>
+      )}
+
+      <div className="card-body">
+        {isElective ? (
+          <ElectivesTable rows={data.electives || []} />
+        ) : (
+          <>
+            <div className="mb-3">
+              <div className="fw-semibold">Needed Fields</div>
+              <div>{fields.length ? fields.join(", ") : <span className="text-muted">(none)</span>}</div>
+            </div>
+
+            <div className="table-responsive">
+              <table className="table table-sm align-middle">
+                <thead>
+                  <tr>
+                    <th>#</th>
+                    <th>Student Name</th>
+                    <th>Status</th>
+                    <th>Respond</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.students?.map((s, i) => (
+                    <StudentRow key={s.crStudentId} i={i} s={s} fields={fields} reqId={data.id} onUpdated={onUpdated} />
+                  ))}
+                  {(!data.students || data.students.length === 0) && (
+                    <tr>
+                      <td colSpan={4} className="text-muted">No students.</td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
 }
 
-/* ---------- flexible respond row ---------- */
+/* ---------- electives table (read-only view) ---------- */
+function ElectivesTable({ rows }) {
+  return (
+    <>
+      <div className="fw-semibold mb-2">Elective Details</div>
+      <div className="table-responsive">
+        <table className="table table-sm align-middle">
+          <thead>
+            <tr>
+              <th>Course</th>
+              <th>Seat</th>
+              <th>Lecture</th>
+              <th>Tutorial</th>
+              <th>Lab</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? (
+              rows.map((e) => (
+                <tr key={e.electiveId}>
+                  <td>
+                    <div className="fw-semibold">{e.courseId}</div>
+                    <small className="text-muted">{e.courseName || "-"}</small>
+                  </td>
+                  <td>{e.seatCount ?? "-"}</td>
+                  <td>
+                    {e.lectureSection ?? "-"}
+                    <br />
+                    <small className="text-muted">
+                      {e.lectureDays || "-"} · {e.lectureStart || "-"}–{e.lectureEnd || "-"}
+                    </small>
+                  </td>
+                  <td>
+                    {e.tutorialSection ?? "-"}
+                    <br />
+                    <small className="text-muted">
+                      {e.tutorialDays || "-"} · {e.tutorialStart || "-"}–{e.tutorialEnd || "-"}
+                    </small>
+                  </td>
+                  <td>
+                    {e.labSection ?? "-"}
+                    <br />
+                    <small className="text-muted">
+                      {e.labDays || "-"} · {e.labStart || "-"}–{e.labEnd || "-"}
+                    </small>
+                  </td>
+                  <td>
+                    <span
+                      className={`badge ${
+                        (e.status || "").toLowerCase() === "offered"
+                          ? "text-bg-success"
+                          : (e.status || "").toLowerCase() === "proposed"
+                          ? "text-bg-warning"
+                          : "text-bg-secondary"
+                      }`}
+                    >
+                      {e.status || "proposed"}
+                    </span>
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <tr>
+                <td colSpan={6} className="text-muted">
+                  No electives for this request.
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
 
+/* ---------- flexible respond row (kept for DataRequest) ---------- */
 function StudentRow({ i, s, fields, reqId, onUpdated }) {
   const [show, setShow] = useState(false);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState("fulfilled"); // supports 'failed'
   const [mode, setMode] = useState("auto"); // auto | irregular | elective | custom
 
-  // auto (NeededFields)
   const [autoValues, setAutoValues] = useState(() => Object.fromEntries(fields.map((k) => [k, ""])));
-
-  // irregular
   const [irr, setIrr] = useState({ PreviousLevelCourses: "", Level: "", Note: "", Replace: false });
-
-  // elective — full UI (lecture/tutorial/lab)
   const [elec, setElec] = useState({
     CourseCode: "",
     SeatCount: "",
     Note: "",
     lecture: { section: "", days: "", start: "", end: "" },
-    tutorial: { days: "", start: "", end: "" }, // section auto = lecture+1
+    tutorial: { days: "", start: "", end: "" },
     labIncluded: false,
-    lab: { days: "", start: "", end: "" }, // section auto = lecture+2
+    lab: { days: "", start: "", end: "" },
   });
-
-  // custom kv (kept)
   const [kv, setKv] = useState([{ key: "", value: "" }]);
 
   const submit = async () => {
@@ -251,7 +431,6 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
           ...(irr.Note ? { Note: irr.Note } : {}),
         };
       } else if (mode === "elective") {
-        // build Offer Elective payload for backend
         const lectureSection = Number(elec.lecture.section || 0);
         const offer = {
           courseCode: elec.CourseCode || undefined,
@@ -288,11 +467,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               }
             : undefined,
         };
-
-        data = {
-          responseType: "Offer Elective",
-          offer,
-        };
+        data = { responseType: "Offer Elective", offer };
       } else {
         const obj = {};
         for (const row of kv) {
@@ -311,7 +486,8 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
       setShow(false);
       onUpdated?.();
     } catch (e) {
-      alert(e.response?.data?.error || e.message || "Respond failed.");
+      // Show real server error
+      alert(formatServerError(e));
     } finally {
       setSending(false);
     }
@@ -319,22 +495,16 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
 
   const onLectSectionChange = (val) => {
     const n = val.replace(/[^\d]/g, "");
-    setElec((p) => ({
-      ...p,
-      lecture: { ...p.lecture, section: n },
-      // tutorial/lab sections are derived on submit
-    }));
+    setElec((p) => ({ ...p, lecture: { ...p.lecture, section: n } }));
   };
 
   return (
     <tr>
       <td>{i + 1}</td>
-
       <td>
         {s.studentName}
         {s.studentId ? <small className="text-muted ms-2">ID: {s.studentId}</small> : null}
       </td>
-
       <td>
         <span
           className={`badge ${
@@ -350,7 +520,6 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
           {s.status}
         </span>
       </td>
-
       <td>
         <button className="btn btn-sm btn-outline-primary" onClick={() => setShow((v) => !v)}>
           {show ? "Cancel" : "Respond"}
@@ -358,7 +527,6 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
 
         {show && (
           <div className="border rounded p-3 mt-2" style={{ maxWidth: 560 }}>
-            {/* response mode */}
             <div className="mb-2">
               <label className="form-label">Response Type</label>
               <select className="form-select" value={mode} onChange={(e) => setMode(e.target.value)}>
@@ -369,7 +537,6 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               </select>
             </div>
 
-            {/* auto */}
             {mode === "auto" && (
               <>
                 {fields.length === 0 && <div className="alert alert-warning py-2">No needed fields in this request.</div>}
@@ -386,7 +553,6 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               </>
             )}
 
-            {/* irregular */}
             {mode === "irregular" && (
               <>
                 <div className="mb-2">
@@ -423,16 +589,11 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                 </div>
                 <div className="mb-2">
                   <label className="form-label">Note</label>
-                  <input
-                    className="form-control"
-                    value={irr.Note}
-                    onChange={(e) => setIrr((p) => ({ ...p, Note: e.target.value }))}
-                  />
+                  <input className="form-control" value={irr.Note} onChange={(e) => setIrr((p) => ({ ...p, Note: e.target.value }))} />
                 </div>
               </>
             )}
 
-            {/* elective — full UI */}
             {mode === "elective" && (
               <>
                 <div className="mb-2">
@@ -444,7 +605,6 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                     placeholder="e.g., SWE485"
                   />
                 </div>
-
                 <div className="mb-2">
                   <label className="form-label">Seat Count</label>
                   <input
@@ -455,15 +615,9 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                     placeholder="e.g., 35"
                   />
                 </div>
-
                 <div className="mb-2">
                   <label className="form-label">Note</label>
-                  <input
-                    className="form-control"
-                    value={elec.Note}
-                    onChange={(e) => setElec((p) => ({ ...p, Note: e.target.value }))}
-                    placeholder="Optional note"
-                  />
+                  <input className="form-control" value={elec.Note} onChange={(e) => setElec((p) => ({ ...p, Note: e.target.value }))} />
                 </div>
 
                 <hr className="my-3" />
@@ -551,12 +705,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                     <h6 className="mb-2">Lab</h6>
                     <div className="mb-2">
                       <label className="form-label">Section (auto = lecture + 2)</label>
-                      <input
-                        type="number"
-                        className="form-control"
-                        value={Number(elec.lecture.section || 0) + 2 || ""}
-                        readOnly
-                      />
+                      <input type="number" className="form-control" value={Number(elec.lecture.section || 0) + 2 || ""} readOnly />
                     </div>
                     <div className="mb-2">
                       <label className="form-label">Days</label>
@@ -586,7 +735,6 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               </>
             )}
 
-            {/* custom */}
             {mode === "custom" && <KeyValueEditor rows={kv} onChange={setKv} />}
 
             <div className="mb-2">
@@ -615,7 +763,6 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
 }
 
 /* ---------- helpers ---------- */
-
 function KeyValueEditor({ rows, onChange }) {
   const addRow = () => onChange([...rows, { key: "", value: "" }]);
   const update = (i, patch) => {

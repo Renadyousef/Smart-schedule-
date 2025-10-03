@@ -77,7 +77,6 @@ function extractReplaceFlag(data) {
 }
 
 async function resolveStudentId(client, { requestId, crStudentId, data }) {
-  // 1) from CommitteeRequestStudents row
   const r1 = await client.query(
     `select "StudentID","StudentName"
        from public."CommitteeRequestStudents"
@@ -88,11 +87,9 @@ async function resolveStudentId(client, { requestId, crStudentId, data }) {
   let studentName = r1.rows[0]?.StudentName ?? null;
   if (studentId) return studentId;
 
-  // 2) from body
   const fromBody = Number(data?.studentId);
   if (Number.isInteger(fromBody)) return fromBody;
 
-  // 3) lookup by name (exact, case-insensitive)
   const name = String(data?.studentName || studentName || "").trim();
   if (!name) return null;
 
@@ -125,7 +122,7 @@ function isOfferElective(data) {
   return rt === "offer elective" || rt === "offer_elective" || rt === "offerelective" || cat === "elective";
 }
 
-// Accepts 24h ("HH:MM" or "HH:MM:SS") and 12h ("H:MM AM/PM") and returns "HH:MM:SS"
+// Accepts 24h ("HH:MM" or "HH:MM:SS") and 12h ("H:MM AM/PM") -> "HH:MM:SS"
 function normTime(t) {
   const s = String(t || "").trim();
   if (!s) return null;
@@ -146,22 +143,14 @@ function normTime(t) {
   return null;
 }
 
-function normDays(days) {
-  if (Array.isArray(days)) return days.map(String).map((d) => d.trim()).filter(Boolean);
-  return String(days ?? "")
-    .split(/[, ]+/g)
-    .map((d) => d.trim())
-    .filter(Boolean);
-}
-
-const toDaysString = (v) => {
+function toDaysString(v) {
   if (Array.isArray(v)) return v.map(String).map((d) => d.trim()).filter(Boolean).join(",");
   return String(v || "")
     .split(/[, ]+/g)
     .map((s) => s.trim())
     .filter(Boolean)
     .join(",");
-};
+}
 
 /* -------------------- controllers -------------------- */
 
@@ -204,17 +193,21 @@ export const listRegistrarRequests = async (req, res) => {
 export const getRegistrarRequest = async (req, res) => {
   try {
     const { id } = req.params;
+
+    // header
     const rq = await pool.query(
       `SELECT "RequestID" AS id, "Title" AS title, "RequestType" AS type,
               "Level" AS level, "NeededFields" AS "neededFields", "Description" AS description,
               "Status" AS status, "CommitteeID" AS "committeeId", "RegistrarID" AS "registrarId",
               "CreatedAt" AS "createdAt", "UpdatedAt" AS "updatedAt",
               "AssignedAt" AS "assignedAt", "HandledAt" AS "handledAt"
-         FROM public."CommitteeRequests" WHERE "RequestID" = $1`,
+         FROM public."CommitteeRequests"
+        WHERE "RequestID" = $1`,
       [id]
     );
     if (rq.rowCount === 0) return res.status(404).json({ error: "Not found" });
 
+    // students (DataRequest)
     const kids = await pool.query(
       `SELECT "CRStudentID" AS "crStudentId","StudentID" AS "studentId","StudentName" AS "studentName",
               "MatchStatus" AS "matchStatus","Status" AS status,"ResponseData" AS "responseData",
@@ -225,7 +218,35 @@ export const getRegistrarRequest = async (req, res) => {
       [id]
     );
 
-    res.json({ ...rq.rows[0], students: kids.rows });
+    // electives (Offer Elective / NewElective)
+    const elect = await pool.query(
+      `SELECT
+          "CRElectiveID"   AS "electiveId",
+          "CourseID"       AS "courseId",
+          "CourseName"     AS "courseName",
+          "SeatCount"      AS "seatCount",
+          "LectureSection" AS "lectureSection",
+          "LectureDays"    AS "lectureDays",
+          ("LectureStart")::text   AS "lectureStart",
+          ("LectureEnd")::text     AS "lectureEnd",
+          "TutorialSection" AS "tutorialSection",
+          "TutorialDays"    AS "tutorialDays",
+          ("TutorialStart")::text  AS "tutorialStart",
+          ("TutorialEnd")::text    AS "tutorialEnd",
+          "LabSection"      AS "labSection",
+          "LabDays"         AS "labDays",
+          ("LabStart")::text       AS "labStart",
+          ("LabEnd")::text         AS "labEnd",
+          "Status"          AS "status",
+          "CreatedAt"       AS "createdAt",
+          "UpdatedAt"       AS "updatedAt"
+        FROM public."CommitteeRequestElectives"
+       WHERE "RequestID" = $1
+       ORDER BY "CRElectiveID"`,
+      [id]
+    );
+
+    res.json({ ...rq.rows[0], students: kids.rows, electives: elect.rows });
   } catch (err) {
     handle500(res, "getRegistrarRequest error", err);
   }
@@ -242,7 +263,6 @@ export const respondForStudent = async (req, res) => {
     }
 
     const lineStatus = sanitizeLineStatus(status);
-
     await client.query("BEGIN");
 
     // 1) store response JSON + status on the line (initial merge)
@@ -267,9 +287,7 @@ export const respondForStudent = async (req, res) => {
             `select "last_login_at" from ${usersTable} where "UserID" = $1`,
             [studentId]
           );
-          if (u.rowCount === 0) {
-            throw new Error("User record not found");
-          }
+          if (u.rowCount === 0) throw new Error("User record not found");
           if (u.rows[0]?.last_login_at == null) {
             await client.query(
               `UPDATE public."CommitteeRequestStudents"
@@ -279,8 +297,7 @@ export const respondForStudent = async (req, res) => {
             );
             await client.query("ROLLBACK");
             return res.status(403).json({
-              error:
-                "Student must log in at least once before registrar can add irregular record.",
+              error: "Student must log in at least once before registrar can add irregular record.",
             });
           }
         }
@@ -334,18 +351,15 @@ export const respondForStudent = async (req, res) => {
       }
     }
 
-    /* 2b) Offer Elective write-through — uses your real Offers table */
+    /* 2b) Offer Elective write-through if a line chooses Offer Elective */
     if (isOfferElective(data)) {
       const offer = data.offer || {};
-      // prefer string course code (e.g., "SWE485"); fall back to numeric ID if you use it
       const courseCode = String(offer.courseCode || "").replace(/\s+/g, "").toUpperCase();
       const courseIdFallback = offer.courseId ?? null;
-
       if (!courseCode && !courseIdFallback) {
         throw new Error("Offer Elective requires courseCode (preferred) or courseId.");
       }
 
-      // Resolve DepartmentID of the registrar who owns this request
       const rq = await client.query(
         `select "RegistrarID" from public."CommitteeRequests" where "RequestID" = $1`,
         [id]
@@ -361,84 +375,51 @@ export const respondForStudent = async (req, res) => {
       const departmentId = dep.rows[0].DepartmentID;
 
       const now = new Date();
-
       const INSERT = `
         insert into public."Offers"
           ("CourseID","DepartmentID","OfferedAt","ClassType","Section","Days","StartTime","EndTime","Status")
         values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-        returning *;
       `;
 
-      // Lecture
-      if (offer.lecture) {
-        const lec = offer.lecture;
-        if (lec.section && lec.days && lec.start && lec.end) {
-          await client.query(INSERT, [
-            courseCode || courseIdFallback,
-            departmentId,
-            now,
-            "Lecture",
-            Number(lec.section),
-            toDaysString(lec.days),
-            normTime(lec.start),
-            normTime(lec.end),
-            "Offered",
-          ]);
-        }
+      if (offer.lecture?.section && offer.lecture?.days && offer.lecture?.start && offer.lecture?.end) {
+        await client.query(INSERT, [
+          courseCode || courseIdFallback,
+          departmentId,
+          now,
+          "Lecture",
+          Number(offer.lecture.section),
+          toDaysString(offer.lecture.days),
+          normTime(offer.lecture.start),
+          normTime(offer.lecture.end),
+          "Offered",
+        ]);
       }
-
-      // Tutorial
-      if (offer.tutorial) {
-        const tut = offer.tutorial;
-        if (tut.section && tut.days && tut.start && tut.end) {
-          await client.query(INSERT, [
-            courseCode || courseIdFallback,
-            departmentId,
-            now,
-            "Tutorial",
-            Number(tut.section),
-            toDaysString(tut.days),
-            normTime(tut.start),
-            normTime(tut.end),
-            "Offered",
-          ]);
-        }
+      if (offer.tutorial?.section && offer.tutorial?.days && offer.tutorial?.start && offer.tutorial?.end) {
+        await client.query(INSERT, [
+          courseCode || courseIdFallback,
+          departmentId,
+          now,
+          "Tutorial",
+          Number(offer.tutorial.section),
+          toDaysString(offer.tutorial.days),
+          normTime(offer.tutorial.start),
+          normTime(offer.tutorial.end),
+          "Offered",
+        ]);
       }
-
-      // Lab (optional)
-      if (offer.labIncluded && offer.lab) {
-        const lab = offer.lab;
-        if (lab.section && lab.days && lab.start && lab.end) {
-          await client.query(INSERT, [
-            courseCode || courseIdFallback,
-            departmentId,
-            now,
-            "Lab",
-            Number(lab.section),
-            toDaysString(lab.days),
-            normTime(lab.start),
-            normTime(lab.end),
-            "Offered",
-          ]);
-        }
+      if (offer.labIncluded && offer.lab?.section && offer.lab?.days && offer.lab?.start && offer.lab?.end) {
+        await client.query(INSERT, [
+          courseCode || courseIdFallback,
+          departmentId,
+          now,
+          "Lab",
+          Number(offer.lab.section),
+          toDaysString(offer.lab.days),
+          normTime(offer.lab.start),
+          normTime(offer.lab.end),
+          "Offered",
+        ]);
       }
-
-      // keep a brief summary in the response data
-      await client.query(
-        `update public."CommitteeRequestStudents"
-            set "ResponseData" = (coalesce("ResponseData",'{}'::jsonb) || $1::jsonb),
-                "Status" = $2, "RespondedAt" = now()
-          where "CRStudentID"=$3 and "RequestID"=$4`,
-        [
-          JSON.stringify({
-            offerElective: {
-              courseCode: courseCode || null,
-              note: offer.note ?? null,
-            },
-          }),
-          lineStatus, crStudentId, id,
-        ]
-      );
     }
 
     // 3) parent request status when no pending lines remain
@@ -476,6 +457,154 @@ export const respondForStudent = async (req, res) => {
     try { await client.query("ROLLBACK"); } catch {}
     return handle500(res, "respondForStudent error", err);
   } finally {
+    const c = await pool.connect().catch(() => null); if (c) c.release();
+  }
+};
+
+/* ---------- NEW: offer all electives in a request and mark fulfilled ---------- */
+/** POST /registrarRequests/requests/:id/offer-electives  */
+export const offerElectivesFromRequest = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { id } = req.params;
+    await client.query("BEGIN");
+
+    // 1) get request + registrar's department
+    const rq = await client.query(
+      `select "RequestType","RegistrarID" from public."CommitteeRequests" where "RequestID" = $1 for update`,
+      [id]
+    );
+    if (rq.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ error: "Request not found" });
+    }
+    const reqType = rq.rows[0].RequestType;
+    const registrarId = rq.rows[0].RegistrarID;
+
+    if (!["NewElective", "Offer Elective", "OfferElective"].includes(reqType)) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "Request is not an elective request" });
+    }
+
+    const dep = await client.query(
+      `select "DepartmentID" from public."User" where "UserID" = $1`,
+      [registrarId]
+    );
+    if (dep.rowCount === 0) throw new Error("Registrar user not found");
+    const departmentId = dep.rows[0].DepartmentID;
+
+    // 2) fetch electives
+    const elect = await client.query(
+      `select * from public."CommitteeRequestElectives" where "RequestID" = $1`,
+      [id]
+    );
+    if (elect.rowCount === 0) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ error: "No electives attached to this request" });
+    }
+
+    // 3) insert to Offers
+    const now = new Date();
+    const INSERT = `
+      insert into public."Offers"
+        ("CourseID","DepartmentID","OfferedAt","ClassType","Section","Days","StartTime","EndTime","Status")
+      values ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+      returning *;
+    `;
+
+    const inserted = [];
+
+    for (const e of elect.rows) {
+      // Lecture
+      if (e.LectureSection && e.LectureDays && e.LectureStart && e.LectureEnd) {
+        const r = await client.query(INSERT, [
+          e.CourseID,
+          departmentId,
+          now,
+          "Lecture",
+          Number(e.LectureSection),
+          toDaysString(e.LectureDays),
+          normTime(e.LectureStart),
+          normTime(e.LectureEnd),
+          "Offered",
+        ]);
+        inserted.push(r.rows[0]);
+      }
+      // Tutorial
+      if (e.TutorialSection && e.TutorialDays && e.TutorialStart && e.TutorialEnd) {
+        const r = await client.query(INSERT, [
+          e.CourseID,
+          departmentId,
+          now,
+          "Tutorial",
+          Number(e.TutorialSection),
+          toDaysString(e.TutorialDays),
+          normTime(e.TutorialStart),
+          normTime(e.TutorialEnd),
+          "Offered",
+        ]);
+        inserted.push(r.rows[0]);
+      }
+      // Lab
+      if (e.LabSection && e.LabDays && e.LabStart && e.LabEnd) {
+        const r = await client.query(INSERT, [
+          e.CourseID,
+          departmentId,
+          now,
+          "Lab",
+          Number(e.LabSection),
+          toDaysString(e.LabDays),
+          normTime(e.LabStart),
+          normTime(e.LabEnd),
+          "Offered",
+        ]);
+        inserted.push(r.rows[0]);
+      }
+    }
+
+    // 4) mark electives + request as fulfilled
+    await client.query(
+      `update public."CommitteeRequestElectives" set "Status" = 'offered', "UpdatedAt" = now()
+        where "RequestID" = $1`,
+      [id]
+    );
+    await client.query(
+      `update public."CommitteeRequests"
+          set "Status"='fulfilled',"HandledAt"=now(),"UpdatedAt"=now()
+        where "RequestID"=$1`,
+      [id]
+    );
+
+    await client.query("COMMIT");
+    return res.json({ ok: true, offered: inserted });
+  } catch (err) {
+    try { await client.query("ROLLBACK"); } catch {}
+    return handle500(res, "offerElectivesFromRequest error", err);
+  } finally {
     client.release();
+  }
+};
+
+/* ---------- NEW: update request status (approve/reject) ---------- */
+/** POST /registrarRequests/requests/:id/status  {status: 'fulfilled'|'rejected'|'pending'} */
+export const updateRegistrarRequestStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body || {};
+    const allowed = new Set(["pending", "fulfilled", "rejected", "failed"]);
+    const s = String(status || "").toLowerCase();
+    if (!allowed.has(s)) return res.status(400).json({ error: "Invalid status" });
+
+    const r = await pool.query(
+      `update public."CommitteeRequests"
+          set "Status"=$2,"UpdatedAt"=now(), "HandledAt" = case when $2 in ('fulfilled','rejected','failed') then now() else "HandledAt" end
+        where "RequestID"=$1
+      returning "RequestID"`,
+      [id, s]
+    );
+    if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
+    return res.json({ ok: true });
+  } catch (err) {
+    return handle500(res, "updateRegistrarRequestStatus error", err);
   }
 };
