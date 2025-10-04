@@ -1,6 +1,6 @@
-// src/components/Schedule/FixedSchedule.jsx
-import React, { useState, useMemo } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
+import axios from "axios";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
 const TIMES = [
@@ -24,36 +24,63 @@ function colorOf(type) {
   return PALETTE[type] || PALETTE.default;
 }
 
-// Example subjects
-const subjects = ["Math", "Physics", "Chemistry", "Biology", "CS", "English"];
-
-export default function FixedSchedule() {
+export default function ViewSchedules() {
   const [levelFilter, setLevelFilter] = useState("");
-  const [subjectFilter, setSubjectFilter] = useState("");
+  const [courseFilter, setCourseFilter] = useState("");
+  const [scheduleGrid, setScheduleGrid] = useState({});
+  const [courses, setCourses] = useState([]);
   const [approving, setApproving] = useState(false);
-
   const [showModal, setShowModal] = useState(false);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  const [scheduleGrid, setScheduleGrid] = useState({}); // empty table initially
-
-  const filteredScheduleGrid = useMemo(() => {
-    if (!subjectFilter) return scheduleGrid;
-    const out = {};
-    for (const day of Object.keys(scheduleGrid)) {
-      out[day] = {};
-      for (const time of Object.keys(scheduleGrid[day])) {
-        const slot = scheduleGrid[day][time];
-        if (slot.subject === subjectFilter) {
-          out[day][time] = slot;
+  // 1️⃣ Fetch all courses once
+  useEffect(() => {
+    axios
+      .get("http://localhost:5000/Schudles/cources")
+      .then((res) => {
+        // ✅ Safety check: ensure we always get an array
+        if (Array.isArray(res.data)) {
+          setCourses(res.data);
+        } else {
+          setCourses([]);
+          console.error("Courses response is not an array:", res.data);
         }
-      }
-    }
-    return out;
-  }, [scheduleGrid, subjectFilter]);
+      })
+      .catch((err) => {
+        setCourses([]);
+        console.error("Error fetching courses:", err);
+      });
+  }, []);
 
-  const skip = useMemo(() => ({}), [filteredScheduleGrid]);
+  // 2️⃣ Fetch schedule when level or course changes
+  useEffect(() => {
+    if (!levelFilter || !courseFilter) {
+      setScheduleGrid({});
+      return;
+    }
+
+    axios
+      .get(`http://localhost:5000/Schudles/course?courseId=${courseFilter}`)
+      .then((res) => {
+        const grid = {};
+        if (Array.isArray(res.data)) {
+          for (const s of res.data) {
+            const day = s.day || "Monday";
+            const time = s.time || "08:00 - 08:50";
+            if (!grid[day]) grid[day] = {};
+            grid[day][time] = {
+              subject: s.course_name,
+              room: s.section_name,
+              type: s.type || "core",
+              duration: s.duration || 1,
+            };
+          }
+        }
+        setScheduleGrid(grid);
+      })
+      .catch((err) => console.error(err));
+  }, [levelFilter, courseFilter]);
 
   const approveSchedule = () => {
     setApproving(true);
@@ -73,6 +100,8 @@ export default function FixedSchedule() {
     }, 500);
   };
 
+  const skip = useMemo(() => ({}), [scheduleGrid]);
+
   return (
     <div className="container my-4">
       <style>{`
@@ -87,7 +116,7 @@ export default function FixedSchedule() {
       {/* Filters + Approve */}
       <div className="d-flex gap-3 mb-3 flex-wrap align-items-center">
         <div>
-          <label className="fw-bold mb-0">Level Filter:</label>
+          <label className="fw-bold mb-0">Level:</label>
           <select
             className="form-select"
             style={{ maxWidth: "150px" }}
@@ -95,24 +124,27 @@ export default function FixedSchedule() {
             onChange={(e) => setLevelFilter(e.target.value)}
           >
             <option value="">Select Level</option>
-            {[1,2,3,4,5,6,7,8].map((lv) => (
+            {[1, 2, 3, 4, 5, 6, 7, 8].map((lv) => (
               <option key={lv} value={lv}>{lv}</option>
             ))}
           </select>
         </div>
 
         <div>
-          <label className="fw-bold mb-0">Subject Filter:</label>
+          <label className="fw-bold mb-0">Course:</label>
           <select
             className="form-select"
             style={{ maxWidth: "200px" }}
-            value={subjectFilter}
-            onChange={(e) => setSubjectFilter(e.target.value)}
+            value={courseFilter}
+            onChange={(e) => setCourseFilter(e.target.value)}
           >
-            <option value="">All Subjects</option>
-            {subjects.map((subj) => (
-              <option key={subj} value={subj}>{subj}</option>
-            ))}
+            <option value="">Select Course</option>
+            {Array.isArray(courses) &&
+              courses.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
           </select>
         </div>
 
@@ -120,7 +152,7 @@ export default function FixedSchedule() {
           <button
             className="btn btn-success"
             onClick={approveSchedule}
-            disabled={approving || !levelFilter}
+            disabled={approving || !levelFilter || !courseFilter}
           >
             {approving ? "Approving..." : "Approve Schedule"}
           </button>
@@ -145,7 +177,7 @@ export default function FixedSchedule() {
                 const key = `${day}#${ti}`;
                 if (skip[key]) return null;
 
-                const slot = filteredScheduleGrid?.[day]?.[time];
+                const slot = scheduleGrid?.[day]?.[time];
                 if (!slot) return <td key={day}></td>;
 
                 const bg = colorOf(slot.type);
@@ -174,9 +206,7 @@ export default function FixedSchedule() {
 
       {/* Feedback Modal Trigger */}
       <div className="text-center mt-3">
-        <button className="btn-feedback" onClick={() => setShowModal(true)}>
-          Give Feedback
-        </button>
+        <button className="btn-feedback" onClick={() => setShowModal(true)}>Give Feedback</button>
       </div>
 
       {/* Feedback Modal */}
