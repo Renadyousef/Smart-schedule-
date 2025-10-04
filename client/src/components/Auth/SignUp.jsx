@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { validateEmail, validatePassword, validateName, validateDropdown } from "./validations";
+import { validateEmail, validatePassword, validateName, validateDropdown, getRoleByEmail } from "./validations";
 import axios from "axios";
 import DepartmentDropdown from "./Departments";
 
@@ -13,13 +13,46 @@ export default function SignUp({ onSignedUp }) {
     password: "",
   });
   const [errors, setErrors] = useState({});
+  const [roleLocked, setRoleLocked] = useState(false);
 
   const handleChange = (e) => {
     const { id, value } = e.target;
-    setInputs((prev) => ({ ...prev, [id]: value }));
+
+    // Update input value
+    setInputs(prev => ({ ...prev, [id]: value }));
+
+    // Live validation
+    let error = "";
+    switch (id) {
+      case "firstName":
+      case "lastName":
+        error = validateName(value); break;
+      case "role":
+      case "department":
+        error = validateDropdown(value); break;
+      case "email":
+        error = validateEmail(value); break;
+      case "password":
+        error = validatePassword(value); break;
+      default: break;
+    }
+    setErrors(prev => ({ ...prev, [id]: error }));
+
+    // Role auto-suggestion based on email
+    if (id === "email") {
+      const suggestedRole = getRoleByEmail(value);
+      if (suggestedRole === "student") {
+        setInputs(prev => ({ ...prev, role: "student" }));
+        setRoleLocked(true); // lock role for students
+      } else {
+        setRoleLocked(false); // user can pick other roles
+        if (inputs.role === "student") setInputs(prev => ({ ...prev, role: "" }));
+      }
+    }
   };
 
   const handleBlur = (e) => {
+    // Optional: validate again on blur
     const { id, value } = e.target;
     let error = "";
     switch (id) {
@@ -35,12 +68,13 @@ export default function SignUp({ onSignedUp }) {
         error = validatePassword(value); break;
       default: break;
     }
-    setErrors((prev) => ({ ...prev, [id]: error }));
+    setErrors(prev => ({ ...prev, [id]: error }));
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
 
+    // Validate all fields on submit
     const allErrors = {
       firstName: validateName(inputs.firstName),
       lastName: validateName(inputs.lastName),
@@ -50,24 +84,19 @@ export default function SignUp({ onSignedUp }) {
       password: validatePassword(inputs.password),
     };
     setErrors(allErrors);
-    if (!Object.values(allErrors).every((err) => !err)) {
+
+    if (!Object.values(allErrors).every(err => !err)) {
       alert("Please fix errors before submitting.");
       return;
     }
 
     try {
       await axios.post("http://localhost:5000/auth/signup", inputs);
-
-      // ملاحظة: ما نحفظ التوكن هنا — نخلي المستخدم يسوي تسجيل دخول يدوي
       alert("Signed up successfully. Please sign in.");
-
-      // اختياري: خزّن الإيميل مؤقتًا لتعبئة حقل الدخول تلقائيًا
       localStorage.setItem("prefillEmail", inputs.email);
-
-      // بدّل التبويب إلى Sign In
       if (onSignedUp) onSignedUp();
 
-      // نظّف الحقول
+      // Reset form
       setInputs({
         firstName: "",
         lastName: "",
@@ -77,6 +106,7 @@ export default function SignUp({ onSignedUp }) {
         password: "",
       });
       setErrors({});
+      setRoleLocked(false);
     } catch (err) {
       if (err.response) {
         alert(err.response.data.message || "Server error.");
@@ -91,45 +121,25 @@ export default function SignUp({ onSignedUp }) {
       {/* First Name */}
       <div className="mb-3">
         <label htmlFor="firstName">First Name</label>
-        <input
-          type="text"
-          id="firstName"
-          className="form-control"
-          value={inputs.firstName}
-          onChange={handleChange}
-          onBlur={handleBlur}
-        />
+        <input type="text" id="firstName" className="form-control" value={inputs.firstName} onChange={handleChange} onBlur={handleBlur} />
         {errors.firstName && <small className="text-danger">{errors.firstName}</small>}
       </div>
 
       {/* Last Name */}
       <div className="mb-3">
         <label htmlFor="lastName">Last Name</label>
-        <input
-          type="text"
-          id="lastName"
-          className="form-control"
-          value={inputs.lastName}
-          onChange={handleChange}
-          onBlur={handleBlur}
-        />
+        <input type="text" id="lastName" className="form-control" value={inputs.lastName} onChange={handleChange} onBlur={handleBlur} />
         {errors.lastName && <small className="text-danger">{errors.lastName}</small>}
       </div>
 
       {/* Role */}
       <div className="mb-3">
         <label htmlFor="role">Role</label>
-        <select
-          id="role"
-          className="form-select"
-          value={inputs.role}
-          onChange={handleChange}
-          onBlur={handleBlur}
-        >
+        <select id="role" className="form-select" value={inputs.role} onChange={handleChange} onBlur={handleBlur} disabled={roleLocked}>
           <option value="">Select your role</option>
           <option value="student">Student</option>
           <option value="instructor">Instructor</option>
-          <option value="sc">Scheduling Committee</option>{/* انتبه: sc بحروف صغيرة */}
+          <option value="sc">Scheduling Committee</option>
           <option value="tlc">Teaching Load Committee</option>
           <option value="registrar">Registrar</option>
         </select>
@@ -139,37 +149,21 @@ export default function SignUp({ onSignedUp }) {
       {/* Department */}
       <div className="mb-3">
         <label htmlFor="department">Department</label>
-        <DepartmentDropdown
-          onSelect={(depId) => setInputs((prev) => ({ ...prev, department: depId }))}
-        />
+        <DepartmentDropdown onSelect={depId => setInputs(prev => ({ ...prev, department: depId }))} />
         {errors.department && <small className="text-danger">{errors.department}</small>}
       </div>
 
       {/* Email */}
       <div className="mb-3">
         <label htmlFor="email">Email</label>
-        <input
-          type="email"
-          id="email"
-          className="form-control"
-          value={inputs.email}
-          onChange={handleChange}
-          onBlur={handleBlur}
-        />
+        <input type="email" id="email" className="form-control" value={inputs.email} onChange={handleChange} onBlur={handleBlur} />
         {errors.email && <small className="text-danger">{errors.email}</small>}
       </div>
 
       {/* Password */}
       <div className="mb-3">
         <label htmlFor="password">Password</label>
-        <input
-          type="password"
-          id="password"
-          className="form-control"
-          value={inputs.password}
-          onChange={handleChange}
-          onBlur={handleBlur}
-        />
+        <input type="password" id="password" className="form-control" value={inputs.password} onChange={handleChange} onBlur={handleBlur} />
         {errors.password && <small className="text-danger">{errors.password}</small>}
       </div>
 

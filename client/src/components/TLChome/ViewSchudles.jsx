@@ -34,34 +34,34 @@ export default function ViewSchedules() {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // 1️⃣ Fetch all courses once
+  // Fetch all courses once
   useEffect(() => {
     axios
       .get("http://localhost:5000/Schudles/cources")
-      .then((res) => {
-        // ✅ Safety check: ensure we always get an array
-        if (Array.isArray(res.data)) {
-          setCourses(res.data);
-        } else {
-          setCourses([]);
-          console.error("Courses response is not an array:", res.data);
-        }
-      })
+      .then((res) => setCourses(Array.isArray(res.data) ? res.data : []))
       .catch((err) => {
         setCourses([]);
         console.error("Error fetching courses:", err);
       });
   }, []);
 
-  // 2️⃣ Fetch schedule when level or course changes
+  // Fetch schedules when level OR course changes
   useEffect(() => {
-    if (!levelFilter || !courseFilter) {
+    // Clear if neither filter selected
+    if (!levelFilter && !courseFilter) {
       setScheduleGrid({});
       return;
     }
 
+    let url = "";
+    if (courseFilter) {
+      url = `http://localhost:5000/Schudles/course?courseId=${courseFilter}`;
+    } else if (levelFilter) {
+      url = `http://localhost:5000/Schudles/level?level=${levelFilter}`;
+    }
+
     axios
-      .get(`http://localhost:5000/Schudles/course?courseId=${courseFilter}`)
+      .get(url)
       .then((res) => {
         const grid = {};
         if (Array.isArray(res.data)) {
@@ -79,7 +79,10 @@ export default function ViewSchedules() {
         }
         setScheduleGrid(grid);
       })
-      .catch((err) => console.error(err));
+      .catch((err) => {
+        console.error("Error fetching schedule:", err);
+        setScheduleGrid({});
+      });
   }, [levelFilter, courseFilter]);
 
   const approveSchedule = () => {
@@ -139,12 +142,11 @@ export default function ViewSchedules() {
             onChange={(e) => setCourseFilter(e.target.value)}
           >
             <option value="">Select Course</option>
-            {Array.isArray(courses) &&
-              courses.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
+            {courses.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.name}
+              </option>
+            ))}
           </select>
         </div>
 
@@ -152,7 +154,7 @@ export default function ViewSchedules() {
           <button
             className="btn btn-success"
             onClick={approveSchedule}
-            disabled={approving || !levelFilter || !courseFilter}
+            disabled={approving || (!levelFilter && !courseFilter)}
           >
             {approving ? "Approving..." : "Approve Schedule"}
           </button>
@@ -204,12 +206,11 @@ export default function ViewSchedules() {
         </tbody>
       </table>
 
-      {/* Feedback Modal Trigger */}
+      {/* Feedback Modal */}
       <div className="text-center mt-3">
         <button className="btn-feedback" onClick={() => setShowModal(true)}>Give Feedback</button>
       </div>
 
-      {/* Feedback Modal */}
       {showModal && (
         <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
           <div className="modal-dialog modal-dialog-centered">
