@@ -47,7 +47,6 @@ export default function ViewSchedules() {
 
   // Fetch schedules when level OR course changes
   useEffect(() => {
-    // Clear if neither filter selected
     if (!levelFilter && !courseFilter) {
       setScheduleGrid({});
       return;
@@ -63,20 +62,24 @@ export default function ViewSchedules() {
     axios
       .get(url)
       .then((res) => {
+        const data = Array.isArray(res.data.rows) ? res.data.rows : res.data;
         const grid = {};
-        if (Array.isArray(res.data)) {
-          for (const s of res.data) {
-            const day = s.day || "Monday";
-            const time = s.time || "08:00 - 08:50";
-            if (!grid[day]) grid[day] = {};
-            grid[day][time] = {
-              subject: s.course_name,
-              room: s.section_name,
-              type: s.type || "core",
-              duration: s.duration || 1,
-            };
-          }
+
+        for (const s of data) {
+          const day = s.DayOfWeek || "Monday";
+          const start = s.StartTime?.slice(0, 5) || "08:00";
+          const end = s.EndTime?.slice(0, 5) || "08:50";
+          const time = `${start} - ${end}`;
+
+          if (!grid[day]) grid[day] = {};
+          grid[day][time] = {
+            subject: s.course_name,
+            room: s.room || "N/A",
+            type: s.course_type || "core",
+            duration: 1,
+          };
         }
+
         setScheduleGrid(grid);
       })
       .catch((err) => {
@@ -128,7 +131,9 @@ export default function ViewSchedules() {
           >
             <option value="">Select Level</option>
             {[1, 2, 3, 4, 5, 6, 7, 8].map((lv) => (
-              <option key={lv} value={lv}>{lv}</option>
+              <option key={lv} value={lv}>
+                {lv}
+              </option>
             ))}
           </select>
         </div>
@@ -167,14 +172,21 @@ export default function ViewSchedules() {
           <tr>
             <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
             {DAYS.map((d) => (
-              <th key={d} style={{ backgroundColor: "#f1f3f5" }}>{d}</th>
+              <th key={d} style={{ backgroundColor: "#f1f3f5" }}>
+                {d}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {TIMES.map((time, ti) => (
             <tr key={time}>
-              <td className="fw-bold" style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}>{time}</td>
+              <td
+                className="fw-bold"
+                style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}
+              >
+                {time}
+              </td>
               {DAYS.map((day) => {
                 const key = `${day}#${ti}`;
                 if (skip[key]) return null;
@@ -188,13 +200,17 @@ export default function ViewSchedules() {
                 if (rowSpan > 1) {
                   for (let k = 1; k < rowSpan; k++) {
                     const nextIdx = ti + k;
-                    if (nextIdx < TIMES.length) skip[`${day}#${nextIdx}`] = true;
+                    if (nextIdx < TIMES.length)
+                      skip[`${day}#${nextIdx}`] = true;
                   }
                 }
 
                 return (
                   <td key={day} rowSpan={rowSpan}>
-                    <div className="subject-box" style={{ backgroundColor: bg }}>
+                    <div
+                      className="subject-box"
+                      style={{ backgroundColor: bg }}
+                    >
                       {slot.subject}
                       <div className="room">Room {slot.room}</div>
                     </div>
@@ -208,16 +224,36 @@ export default function ViewSchedules() {
 
       {/* Feedback Modal */}
       <div className="text-center mt-3">
-        <button className="btn-feedback" onClick={() => setShowModal(true)}>Give Feedback</button>
+        <button
+          className="btn-feedback"
+          onClick={() => setShowModal(true)}
+        >
+          Give Feedback
+        </button>
       </div>
 
       {showModal && (
-        <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
+        <div
+          className="modal fade show"
+          style={{ display: "block", background: "rgba(0,0,0,.35)" }}
+        >
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content" style={{ borderRadius: "20px" }}>
-              <div className="modal-header" style={{ background: "#e9f2ff", color: "#0b3a67", borderTopLeftRadius: "20px", borderTopRightRadius: "20px" }}>
+              <div
+                className="modal-header"
+                style={{
+                  background: "#e9f2ff",
+                  color: "#0b3a67",
+                  borderTopLeftRadius: "20px",
+                  borderTopRightRadius: "20px",
+                }}
+              >
                 <h5 className="modal-title">Feedback</h5>
-                <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
+                <button
+                  type="button"
+                  className="btn-close"
+                  onClick={() => setShowModal(false)}
+                ></button>
               </div>
               <div className="modal-body">
                 <textarea
@@ -231,7 +267,11 @@ export default function ViewSchedules() {
               <div className="modal-footer d-flex gap-2">
                 <button
                   className="btn btn-outline-secondary"
-                  style={{ borderRadius: "12px", padding: "8px 18px", fontWeight: "600" }}
+                  style={{
+                    borderRadius: "12px",
+                    padding: "8px 18px",
+                    fontWeight: "600",
+                  }}
                   onClick={() => setShowModal(false)}
                   disabled={submitting}
                 >
@@ -246,7 +286,7 @@ export default function ViewSchedules() {
                     padding: "8px 18px",
                     fontWeight: "600",
                     border: "none",
-                    opacity: submitting || !comment.trim() ? 0.7 : 1
+                    opacity: submitting || !comment.trim() ? 0.7 : 1,
                   }}
                   onClick={submitFeedback}
                   disabled={submitting || !comment.trim()}
