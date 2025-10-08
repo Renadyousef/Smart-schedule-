@@ -5,7 +5,6 @@ import axios from "axios";
 
 export default function ManageElectives() {
   const [electivesData, setElectivesData] = useState([]);
-  const [approvedCourses, setApprovedCourses] = useState([]);
 
   // Fetch electives from backend
   useEffect(() => {
@@ -14,7 +13,7 @@ export default function ManageElectives() {
         const response = await axios.get("http://localhost:5000/Electives/view");
         // Map backend fields to JS-friendly keys
         const mappedData = response.data.map((e) => ({
-          offerid: e.OfferID, // keep for internal use
+          offerid: e.OfferID,
           departmentname: e.departmentname,
           courseid: e.CourseID,
           coursename: e.coursename,
@@ -38,11 +37,14 @@ export default function ManageElectives() {
   const handleApprove = async (offerID) => {
     try {
       await axios.put(`http://localhost:5000/Electives/approve/${offerID}`);
-      setApprovedCourses((prev) => [...prev, offerID]);
-      alert("Elective approved successfully!");
+      // ✅ Instantly update the status in UI
+      setElectivesData((prevData) =>
+        prevData.map((item) =>
+          item.offerid === offerID ? { ...item, status: "Approved" } : item
+        )
+      );
     } catch (error) {
       console.error("Error approving elective:", error);
-      alert("Failed to approve elective. Please try again.");
     }
   };
 
@@ -54,9 +56,7 @@ export default function ManageElectives() {
           <div key={e.offerid} className="col-md-6 col-lg-4">
             <div className="card shadow-sm h-100 border-0">
               <div className="card-body d-flex flex-column">
-                <h5 className="card-title mb-2">
-                   {e.coursename}
-                </h5>
+                <h5 className="card-title mb-2">{e.coursename}</h5>
                 <p className="card-text mb-2">
                   <strong>Department:</strong> {e.departmentname} <br />
                   <strong>Section:</strong> {e.section} <br />
@@ -64,7 +64,9 @@ export default function ManageElectives() {
                   <strong>Status:</strong>{" "}
                   <span
                     className={`badge ${
-                      e.status === "Approved" ? "bg-success" : "bg-warning text-dark"
+                      e.status === "Approved"
+                        ? "bg-success"
+                        : "bg-warning text-dark"
                     }`}
                   >
                     {e.status}
@@ -75,18 +77,16 @@ export default function ManageElectives() {
                   <strong>Offered At:</strong>{" "}
                   {new Date(e.offeredat).toLocaleString()} <br />
                 </p>
-                <button
-                  className={`btn mt-auto ${
-                    approvedCourses.includes(e.offerid) || e.status === "Approved"
-                      ? "btn-success disabled"
-                      : "btn-primary"
-                  }`}
-                  onClick={() => handleApprove(e.offerid)}
-                >
-                  {approvedCourses.includes(e.offerid) || e.status === "Approved"
-                    ? "Approved"
-                    : "Approve"}
-                </button>
+
+                {/* ✅ Show button only if not approved */}
+                {e.status !== "Approved" && (
+                  <button
+                    className="btn mt-auto btn-primary"
+                    onClick={() => handleApprove(e.offerid)}
+                  >
+                    Approve
+                  </button>
+                )}
               </div>
             </div>
           </div>

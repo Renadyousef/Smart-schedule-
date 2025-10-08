@@ -29,3 +29,31 @@ export const fetch_offers = async (req, res) => {
     res.status(500).json({ error: "Failed to fetch offers" });
   }
 };
+//apprive offers
+export const handel_offers = async (req, res) => {
+  const offerId = req.params.id;
+  
+  try {
+    // Update status to 'Approved'
+    const update = await pool.query(
+      `UPDATE public."Offers"
+       SET "Status" = 'Approved'
+       WHERE "OfferID" = $1
+       RETURNING *;`,
+      [offerId]
+    );
+
+    if (update.rowCount === 0) {
+      return res.status(404).json({ error: "Offer not found" });
+    }
+
+    res.json({
+      message: "Offer approved successfully",
+      updatedOffer: update.rows[0]
+    });
+
+  } catch (err) {
+    console.error("Error approving offer:", err);
+    res.status(500).json({ error: "Failed to approve offer" });
+  }
+};
