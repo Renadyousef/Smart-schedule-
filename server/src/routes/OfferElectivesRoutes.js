@@ -2,6 +2,7 @@ import express from "express";
 import { view_electives } from "../controllers/ViewElectives.js";
 import { verifyToken } from "../middleware/verfiyToken.js";
 import { submit_electives } from "../controllers/SubmitElectivestoSC.js";
+//on the regtierer end
 const router = express.Router();
 //to get them on display
 router.get('/view',verifyToken,view_electives)
