@@ -20,6 +20,8 @@ import RegistrarRequestsRoutes from "./routes/RegistrarRequestsRoutes.js";
 import FetchNotificationRoute from './routes/ScNotificationsRoute.js'
 import TlcSchdules from './routes/TlcRoutes.js'
 import Electives_on_sc from './routes/ElectivesOffersRoute.js'
+import notificationsRouter from "./routes/notificationsRoutes.js";
+
 
 const app = express();
 
@@ -57,4 +59,5 @@ app.use("/schedule", ScheduleRoutes);
 app.use('/Notifications',FetchNotificationRoute)//for SC page
 app.use('/Schudles',TlcSchdules)
 app.use('/Electives',Electives_on_sc)
+app.use("/Notifications", notificationsRouter);
 export default app;
