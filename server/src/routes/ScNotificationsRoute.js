@@ -1,20 +1,25 @@
 import express from "express";
-import { verifyToken } from "../middleware/verfiyToken.js";
 import {
-  fetchMyNotifications,
-  markNotificationRead,
   createNotification,
-} from "../controllers/NotificationSC.js";
+  listNotifications,
+  markRead,
+  markAllRead,
+} from "../controllers/NotificationSC.js"; // exact file name
 
 const router = express.Router();
 
-// كل المستخدم يشوف إشعاراته فقط
-router.get("/view", verifyToken, fetchMyNotifications);
-
-// تأشير كمقروء
-router.patch("/:id/read", verifyToken, markNotificationRead);
-
-// إنشاء إشعار (تستخدمونها من أي مكان بالخلفية، أو مؤقتًا عبر POST)
-router.post("/", verifyToken, createNotification);
+/**
+ * This router is mounted in app.js at path `/Notifications`.
+ * Therefore, define routes RELATIVE to that mount so the final
+ * URLs become:
+ *   POST   /Notifications
+ *   GET    /Notifications/view
+ *   PATCH  /Notifications/:id/read
+ *   POST   /Notifications/mark-all-read
+ */
+router.post("/", createNotification);
+router.get("/view", listNotifications);
+router.patch("/:id/read", markRead);
+router.post("/mark-all-read", markAllRead);
 
 export default router;

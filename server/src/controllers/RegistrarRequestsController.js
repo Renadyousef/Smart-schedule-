@@ -192,7 +192,7 @@ export const respondForStudent = async (req, res) => {
   const client = await pool.connect();
   try {
     const { id, crStudentId } = req.params;
-    const { data, status } = req.body || {};
+    const { data, status, createdBy: bodyCreatedBy = null, receiverId: bodyReceiverId = null } = req.body || {};
     if (!data || typeof data !== "object") {
       return res.status(400).json({ error: "Missing data" });
     }
@@ -315,6 +315,46 @@ export const respondForStudent = async (req, res) => {
       );
     }
 
+    // 4) create notification for Scheduling Committee (optional)
+    try {
+      // Try to infer receiver/creator if not provided
+      let receiverId = bodyReceiverId ? Number(bodyReceiverId) : null;
+      let createdById = bodyCreatedBy ? Number(bodyCreatedBy) : null;
+
+      const hdr = await client.query(
+        `select "CommitteeID","RegistrarID","CreatedBy" from public."CommitteeRequests" where "RequestID"=$1`,
+        [id]
+      );
+      if (!receiverId) receiverId = hdr.rows[0]?.CommitteeID ?? hdr.rows[0]?.CreatedBy ?? null;
+      if (!createdById) createdById = hdr.rows[0]?.RegistrarID ?? null;
+
+      if (receiverId) {
+        const payload = {
+          action: "registrar_response",
+          requestId: Number(id),
+          crStudentId: Number(crStudentId),
+          lineStatus,
+          ...data
+        };
+        await client.query(
+          `INSERT INTO "Notifications"
+            ("ReceiverID","CreatedBy","Message","Type","Entity","EntityId","Data")
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [
+            Number(receiverId),
+            createdById ?? null,
+            `Registrar responded on request ${id}`,
+            "request",
+            "CommitteeRequest",
+            Number(id),
+            JSON.stringify(payload)
+          ]
+        );
+      }
+    } catch (notifyErr) {
+      console.warn("respondForStudent: notification insert skipped", notifyErr?.message);
+    }
+
     await client.query("COMMIT");
     return res.json({ ok: true });
   } catch (err) {
@@ -344,6 +384,36 @@ export const updateRegistrarRequestStatus = async (req, res) => {
       [id, s]
     );
     if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
+
+    // Notify Scheduling Committee about the status change
+    try {
+      const hdr = await pool.query(
+        `select "CommitteeID","RegistrarID","CreatedBy","Title" from public."CommitteeRequests" where "RequestID"=$1`,
+        [id]
+      );
+      const receiverId = hdr.rows[0]?.CommitteeID ?? hdr.rows[0]?.CreatedBy ?? null;
+      const createdById = hdr.rows[0]?.RegistrarID ?? null;
+      const title = hdr.rows[0]?.Title || "Request";
+      if (receiverId) {
+        await pool.query(
+          `INSERT INTO "Notifications"
+            ("ReceiverID","CreatedBy","Message","Type","Entity","EntityId","Data")
+           VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+          [
+            Number(receiverId),
+            createdById ?? null,
+            `Registrar updated status of ${title} (#${id}) to ${s}`,
+            "request",
+            "CommitteeRequest",
+            Number(id),
+            JSON.stringify({ action: "request_status", status: s, requestId: Number(id) })
+          ]
+        );
+      }
+    } catch (notifyErr) {
+      console.warn("updateRegistrarRequestStatus: notification insert skipped", notifyErr?.message);
+    }
+
     return res.json({ ok: true });
   } catch (err) {
     return handle500(res, "updateRegistrarRequestStatus error", err);
