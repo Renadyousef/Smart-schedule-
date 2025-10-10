@@ -22,10 +22,6 @@ import TlcSchdules from './routes/TlcRoutes.js'
 import Electives_on_sc from './routes/ElectivesOffersRoute.js'
 import notificationsRouter from "./routes/notificationsRoutes.js";
 
-
-import notificationsRouter from "./routes/notifications.routes.js";
-
-
 const app = express();
 
 // If you serve frontend from Vite on 5173:
