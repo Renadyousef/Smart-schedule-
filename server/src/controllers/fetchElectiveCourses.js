@@ -1,6 +1,6 @@
 // controllers/fetchElectiveCourses.js
 import pool from '../../DataBase_config/DB_config.js';
-
+//on registrer end 
 export const fetchElectiveCourses = async (req, res) => {
   try {
     const result = await pool.query(`

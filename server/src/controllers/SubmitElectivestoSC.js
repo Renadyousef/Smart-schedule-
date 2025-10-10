@@ -1,29 +1,5 @@
-// controllers/fetchElectiveCourses.js
 import pool from '../../DataBase_config/DB_config.js';
 
-/**
- * Expected req.body:
- * {
- *   "electives": [
- *     {
- *       "CourseID": "CS101",
- *       "name": "Intro to Programming",
- *       "lectureSection": 14,
- *       "lectureDays": "Monday,Wednesday,Friday",
- *       "lectureStart": "09:00",
- *       "lectureEnd": "10:30",
- *       "tutorialSection": 15,
- *       "tutorialDays": "Tuesday,Thursday",
- *       "tutorialStart": "11:00",
- *       "tutorialEnd": "12:00",
- *       "labSection": 16,
- *       "labDays": "Wednesday",
- *       "labStart": "14:00",
- *       "labEnd": "16:00"
- *     }
- *   ]
- * }
- */
 export const submit_electives = async (req, res) => {
   try {
     const { electives } = req.body;
@@ -42,6 +18,7 @@ export const submit_electives = async (req, res) => {
       return res.status(404).json({ error: "Registrar not found" });
     }
     const departmentId = userResult.rows[0].DepartmentID;
+
     const now = new Date();
     const inserted = [];
 
@@ -81,7 +58,7 @@ export const submit_electives = async (req, res) => {
       ]);
       inserted.push(tutorialResult.rows[0]);
 
-      // Insert Lab if labSection is provided
+      // Insert Lab if labSection exists
       if (elective.labSection && elective.labDays && elective.labStart && elective.labEnd) {
         const labResult = await pool.query(insertQuery, [
           elective.CourseID,
@@ -96,6 +73,25 @@ export const submit_electives = async (req, res) => {
         ]);
         inserted.push(labResult.rows[0]);
       }
+    }
+
+    // Safely insert notification without breaking electives
+    try {
+      const depResult = await pool.query(
+        `SELECT "Name" FROM "Departments" WHERE "DepartmentID" = $1`,
+        [departmentId]
+      );
+      const departmentName = depResult.rows[0]?.Name || "Unknown Department";
+
+      const message = `New electives have been offered by ${departmentName} Department.`;
+
+      await pool.query(
+        `INSERT INTO "Notifications" ("Message", "CreatedBy", "Type", "IsRead")
+         VALUES ($1, $2, $3, $4)`,
+        [message, userId, 'register_to_scheduler', false]
+      );
+    } catch (notifErr) {
+      console.error("Notification insert failed:", notifErr);
     }
 
     return res.json({
