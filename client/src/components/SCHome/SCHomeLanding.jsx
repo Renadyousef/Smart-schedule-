@@ -218,7 +218,10 @@ function StudentNotificationsPanel() {
 <div className="text-muted small mt-1">
   From: {n.Full_name || "Unknown"}
   {Number.isFinite(n.ScheduleLevel) && (
-    <span className="ms-2">(Schedule Level: {n.ScheduleLevel})</span>
+    <span className="ms-2">
+(Level {n.ScheduleLevel}, Group {n.GroupNo ?? 1})
+
+    </span>
   )}
   {n.Email && (
     <div>{n.Email}</div>

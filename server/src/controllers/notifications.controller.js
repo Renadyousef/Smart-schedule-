@@ -67,7 +67,8 @@ export async function getSCNotifications(req, res) {
       n."ReadAt",
       ${NAME_SQL},
       u."Email" AS "Email",
-      sch."Level" AS "ScheduleLevel"
+      sch."Level" AS "ScheduleLevel",
+      sch."GroupNo" AS "GroupNo"  -- ✅ إرجاع رقم القروب
     ${base}
     ${whereSql}
     ORDER BY n."CreatedAt" DESC

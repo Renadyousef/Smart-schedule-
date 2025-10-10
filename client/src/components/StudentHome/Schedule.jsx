@@ -1,4 +1,4 @@
-// src/components/Schedule/FixedSchedule.jsx
+// client/src/components/Schedule/FixedSchedule.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 
@@ -15,24 +15,25 @@ const TIMES = [
 
 const PALETTE = {
   core: "#cce5ff",
-  elective: "#fff9c4",
+  tutorial: "#ffe0b2",
   lab: "#e1bee7",
+  elective: "#fff9c4",
   default: "#f8f9fa",
 };
 
 function normalizeType(type) {
   const t = String(type || "").toLowerCase();
-  if (t === "mandatory" || t === "core") return "core";
-  if (t === "elective" || t === "optional") return "elective";
+  if (t === "tutorial") return "tutorial";
   if (t === "lab" || t === "laboratory") return "lab";
+  if (t === "elective" || t === "optional") return "elective";
   return "core";
 }
 function colorOf(type) {
   const nt = normalizeType(type);
-  if (nt === "core") return PALETTE.core;
-  if (nt === "elective") return PALETTE.elective;
+  if (nt === "tutorial") return PALETTE.tutorial;
   if (nt === "lab") return PALETTE.lab;
-  return PALETTE.default;
+  if (nt === "elective") return PALETTE.elective;
+  return PALETTE.core;
 }
 function titleCaseDay(dbDay) {
   if (!dbDay) return "";
@@ -42,17 +43,63 @@ function hmToMin(hm) {
   const [h, m] = String(hm).split(":").map(Number);
   return h * 60 + m;
 }
-
 const SLOT_PARTS = TIMES.map((t) => {
   const [s, e] = t.split(" - ");
   return { s, e, sMin: hmToMin(s), eMin: hmToMin(e) };
 });
 const SLOT_STARTS = SLOT_PARTS.map((p) => p.s);
 
+/* ===== منطق تحديد النوع ===== */
+const INTERNAL_LECTURE_DAYS = new Set(["Sunday", "Tuesday", "Thursday"]);
+function inferTypeFromSlot(slot) {
+  const name = String(slot?.course_name || "").toLowerCase();
+  if (/lab|laborator/.test(name)) return "lab";
+  if (/tutorial/.test(name)) return "tutorial";
+  const isExternal = !!slot?.is_external;
+  if (!isExternal) {
+    const day = String(slot?.day || "").trim();
+    if (!INTERNAL_LECTURE_DAYS.has(day)) return "tutorial";
+  }
+  return "core";
+}
+
+/* ===== تحويل ردّ /grid-by-level إلى rows ===== */
+function groupsGridToRows(groups) {
+  const rows = [];
+  for (const g of groups || []) {
+    const meta = g?.meta || {};
+    const scheduleId = g?.scheduleId ?? null;
+    const level = meta.level ?? null;
+    const status = meta.status ?? null;
+    const groupNo = meta.groupNo ?? null;
+
+    for (const s of g?.slots || []) {
+      const deducedType = inferTypeFromSlot(s);
+      rows.push({
+        ScheduleID: scheduleId,
+        Level: level,
+        Status: status,
+        GroupNo: groupNo,
+        course_code: s.course_code,
+        course_name: s.course_name,
+        course_type: deducedType,
+        SectionID: s.section_id,
+        room: s.section_number ? String(s.section_number).padStart(3, "0") : "000",
+        DayOfWeek: s.day,
+        StartTime: s.start,
+        EndTime: s.end,
+      });
+    }
+  }
+  return rows;
+}
+
+/* ===== rows -> schedule grid ===== */
 function rowsToSchedule(rows) {
   const out = {};
   for (const r of rows || []) {
-    const day = titleCaseDay(r.DayOfWeek || r.day_of_week || r.day);
+    const rawDay = String(r.DayOfWeek || r.day_of_week || r.day || "").trim();
+    const day = titleCaseDay(rawDay);
     if (!DAYS.includes(day)) continue;
 
     const startHM = String(r.StartTime || r.start_time).slice(0, 5);
@@ -86,6 +133,7 @@ function rowsToSchedule(rows) {
         scheduleId: r.ScheduleID ?? null,
         level: r.Level ?? null,
         status: r.Status ?? null,
+        groupNo: r.GroupNo ?? r.group_no ?? null,
         sectionId: r.SectionID ?? null,
         courseCode: r.course_code ?? null,
         courseName: r.course_name ?? null,
@@ -98,39 +146,76 @@ function rowsToSchedule(rows) {
   return out;
 }
 
+/* ===== tabs: group-by-schedule ===== */
 function groupRowsBySchedule(rows) {
   const grouped = {};
   for (const row of rows || []) {
     const sid = row.ScheduleID;
     if (sid == null) continue;
-    const level = row.Level ?? row.level ?? row.sch_level ?? row.schedule_level ?? "?";
-    if (!grouped[sid]) grouped[sid] = { scheduleId: sid, level, rows: [] };
+    const level = row.Level ?? row.level ?? "?";
+    const groupNo = row.GroupNo ?? row.group_no ?? null;
+    if (!grouped[sid]) grouped[sid] = { scheduleId: sid, level, groupNo, rows: [] };
     grouped[sid].rows.push(row);
+    if (grouped[sid].groupNo == null && groupNo != null) grouped[sid].groupNo = groupNo;
   }
   return Object.values(grouped).sort((a, b) => {
     const la = Number(a.level), lb = Number(b.level);
     if (!Number.isNaN(la) && !Number.isNaN(lb) && la !== lb) return la - lb;
+    const ga = Number(a.groupNo ?? 0), gb = Number(b.groupNo ?? 0);
+    if (ga !== gb) return ga - gb;
     return a.scheduleId - b.scheduleId;
   });
 }
 
-export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
+/* ===== buckets: كل لفل فيه قروبات ===== */
+function buildLevelBuckets(allGroups) {
+  const map = new Map();
+  for (const g of allGroups) {
+    const lvl = Number(g.level);
+    if (!map.has(lvl)) map.set(lvl, { level: lvl, groups: [] });
+    map.get(lvl).groups.push(g);
+  }
+  const buckets = Array.from(map.values());
+  buckets.forEach((b) => {
+    b.groups.sort((a, b2) => {
+      const ga = Number(a.groupNo ?? 1);
+      const gb = Number(b2.groupNo ?? 1);
+      if (ga !== gb) return ga - gb;
+      return a.scheduleId - b2.scheduleId;
+    });
+  });
+  buckets.sort((a, b) => a.level - b.level);
+  return buckets;
+}
+
+export default function FixedSchedule({
+  apiBase = (import.meta?.env?.VITE_API_BASE || "http://localhost:5000"),
+}) {
+  const [viewMode, setViewMode] = useState("your"); // "your" | "all"
+
   const [scheduleGrid, setScheduleGrid] = useState({});
   const [scheduleIdCurrent, setScheduleIdCurrent] = useState(null);
   const [levelCurrent, setLevelCurrent] = useState(null);
+  const [groupNoCurrent, setGroupNoCurrent] = useState(null);
 
-  const [allSchedules, setAllSchedules] = useState([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [yourGroups, setYourGroups] = useState([]);
+  const [yourGroupPos, setYourGroupPos] = useState(0);
+
+  const [levelBuckets, setLevelBuckets] = useState([]);
+  const [levelPos, setLevelPos] = useState(0);
+  const [groupPosInLevel, setGroupPosInLevel] = useState(0);
 
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState("");
+  const [flash, setFlash] = useState({ type: "", msg: "" });
+
   const [showModal, setShowModal] = useState(false);
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [flash, setFlash] = useState({ type: "", msg: "" });
-  const [viewMode, setViewMode] = useState("your"); // "your" | "all"
+  const [selectedTarget, setSelectedTarget] = useState(null);
 
-  const [selectedTarget, setSelectedTarget] = useState(null); // { sectionId, subject, day, startHM, endHM } | null
+  /* ===== مهم: skip واحد لكل render لمنع تكرار الخلايا عند الـrowSpan ===== */
+  const skip = useMemo(() => ({}), [scheduleGrid]);
 
   useEffect(() => {
     async function run() {
@@ -147,11 +232,9 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
 
         const token = localStorage.getItem("token");
 
-        const fetchLevel = async (level) => {
-          const url = new URL("/api/sections/courses-by-level", apiBase);
+        const fetchLevelGroups = async (level) => {
+          const url = new URL("/api/sections/grid-by-level", apiBase);
           url.searchParams.set("level", String(level));
-          url.searchParams.set("status", "any");
-          url.searchParams.set("includeSlots", "1");
           const res = await fetch(url.toString(), {
             headers: {
               "Content-Type": "application/json",
@@ -160,54 +243,61 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
           });
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
-          return payload;
+
+          const rows = groupsGridToRows(payload?.groups || []);
+          const grouped = groupRowsBySchedule(rows);
+          return { level, groups: grouped };
         };
 
         if (viewMode === "your") {
-          const payload = await fetchLevel(myLevel);
-          const inferredScheduleId =
-            payload?.scheduleId ??
-            payload?.ScheduleID ??
-            payload?.rows?.[0]?.ScheduleID ??
-            null;
+          const { groups } = await fetchLevelGroups(myLevel);
+          const safeGroups = groups.length
+            ? groups
+            : [{ scheduleId: null, level: myLevel, groupNo: 1, rows: [] }];
 
-          setScheduleIdCurrent(inferredScheduleId);
+          setYourGroups(safeGroups);
+          setYourGroupPos(0);
+
+          const g = safeGroups[0];
+          setScheduleIdCurrent(g.scheduleId);
           setLevelCurrent(myLevel);
-          setAllSchedules([]);
-          setCurrentIndex(0);
-          setScheduleGrid(rowsToSchedule(payload.rows));
+          setGroupNoCurrent(g.groupNo ?? 1);
+          setScheduleGrid(rowsToSchedule(g.rows));
         } else {
           const levels = [1,2,3,4,5,6,7,8];
-          const results = await Promise.allSettled(levels.map((lv) => fetchLevel(lv)));
+          const results = await Promise.allSettled(levels.map((lv) => fetchLevelGroups(lv)));
 
-          const collected = [];
-          results.forEach((r, i) => {
+          const allGroups = [];
+          results.forEach((r) => {
             if (r.status !== "fulfilled") return;
-            const payload = r.value;
-            const grouped = groupRowsBySchedule(payload.rows || []);
-            grouped.forEach(g => {
-              if (g.level === "?" || g.level == null) g.level = levels[i];
-              collected.push(g);
-            });
+            const { level, groups } = r.value;
+            if (!groups.length) {
+              allGroups.push({ scheduleId: null, level, groupNo: 1, rows: [] });
+            } else {
+              allGroups.push(...groups);
+            }
           });
 
-          if (collected.length === 0) {
-            setAllSchedules([]);
-            setCurrentIndex(0);
+          const buckets = buildLevelBuckets(allGroups);
+          setLevelBuckets(buckets);
+
+          const firstLevelIdx = buckets.findIndex(b => Array.isArray(b.groups) && b.groups.length > 0);
+          if (firstLevelIdx === -1) {
+            setLevelPos(0);
+            setGroupPosInLevel(0);
             setScheduleIdCurrent(null);
             setLevelCurrent(null);
+            setGroupNoCurrent(null);
             setScheduleGrid({});
           } else {
-            collected.sort((a,b) => {
-              const la = Number(a.level), lb = Number(b.level);
-              if (la !== lb) return la - lb;
-              return a.scheduleId - b.scheduleId;
-            });
-            setAllSchedules(collected);
-            setCurrentIndex(0);
-            setScheduleIdCurrent(collected[0].scheduleId);
-            setLevelCurrent(collected[0].level);
-            setScheduleGrid(rowsToSchedule(collected[0].rows));
+            setLevelPos(firstLevelIdx);
+            setGroupPosInLevel(0);
+            const curLevel = buckets[firstLevelIdx];
+            const curGroup = curLevel.groups[0];
+            setScheduleIdCurrent(curGroup.scheduleId);
+            setLevelCurrent(curLevel.level);
+            setGroupNoCurrent(curGroup.groupNo ?? 1);
+            setScheduleGrid(rowsToSchedule(curGroup.rows));
           }
         }
       } catch (e) {
@@ -215,8 +305,12 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         setScheduleGrid({});
         setScheduleIdCurrent(null);
         setLevelCurrent(null);
-        setAllSchedules([]);
-        setCurrentIndex(0);
+        setGroupNoCurrent(null);
+        setYourGroups([]);
+        setYourGroupPos(0);
+        setLevelBuckets([]);
+        setLevelPos(0);
+        setGroupPosInLevel(0);
       } finally {
         setLoading(false);
       }
@@ -224,90 +318,64 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
     run();
   }, [apiBase, viewMode]);
 
-  function showScheduleAt(idx) {
-    if (idx < 0 || idx >= allSchedules.length) return;
-    const it = allSchedules[idx];
-    setCurrentIndex(idx);
-    setScheduleIdCurrent(it.scheduleId);
-    setLevelCurrent(it.level);
-    setScheduleGrid(rowsToSchedule(it.rows));
-  }
-
-  function goNext() {
-    if (allSchedules.length === 0) return;
-    const next = (currentIndex + 1) % allSchedules.length;
-    showScheduleAt(next);
-  }
-  function goPrev() {
-    if (allSchedules.length === 0) return;
-    const prev = (currentIndex - 1 + allSchedules.length) % allSchedules.length;
-    showScheduleAt(prev);
-  }
-
-  const skip = useMemo(() => ({}), [scheduleGrid]);
-
-  // فتح المودال عند الضغط على خلية (ونص افتتاحي اختياري)
-  function onCellClick(slot) {
-    if (!slot) return;
-    setSelectedTarget({
-      sectionId: slot.meta?.sectionId ?? null,
-      subject: slot.subject,
-      day: slot.meta?.day,
-      startHM: slot.meta?.startHM,
-      endHM: slot.meta?.endHM,
-    });
-    const prefix = `[${slot.meta?.day} ${slot.meta?.startHM}-${slot.meta?.endHM}] ${slot.subject}: `;
-    setComment((prev) => (prev?.trim() ? prev : prefix));
-    setShowModal(true);
-  }
-
-  async function submitFeedback() {
-    setSubmitting(true);
-    setFlash({ type: "", msg: "" });
-    try {
-      const token = localStorage.getItem("token");
-      const userRaw = localStorage.getItem("user");
-      const user = userRaw ? JSON.parse(userRaw) : {};
-      const userId = user?.id ?? user?._id ?? user?.UserID ?? user?.StudentID ?? null;
-      const role =
-        user?.role || user?.Role || user?.userRole || (user?.isAdmin ? "admin" : "student");
-
-      if (!token) throw new Error("Missing auth token");
-      if (!userId) throw new Error("Missing user id");
-      if (!scheduleIdCurrent) throw new Error("Missing schedule id");
-      if (!comment.trim()) throw new Error("Write your feedback first");
-
-      const body = {
-        comment: comment.trim(),
-        scheduleId: scheduleIdCurrent,
-        courseId: null,
-        role,
-        userId,
-      };
-
-      const res = await fetch(`${apiBase}/api/feedback`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(body),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
-
-      setFlash({ type: "success", msg: "Feedback submitted successfully." });
-      setShowModal(false);
-      setComment("");
-      setSelectedTarget(null);
-    } catch (e) {
-      setFlash({ type: "danger", msg: e.message || "Failed to submit feedback." });
-    } finally {
-      setSubmitting(false);
-      setTimeout(() => setFlash({ type: "", msg: "" }), 4000);
+  function selectGroupByIndex(i) {
+    if (viewMode === "your") {
+      if (i < 0 || i >= yourGroups.length) return;
+      setYourGroupPos(i);
+      const g = yourGroups[i];
+      setScheduleIdCurrent(g.scheduleId);
+      setLevelCurrent(g.level);
+      setGroupNoCurrent(g.groupNo ?? 1);
+      setScheduleGrid(rowsToSchedule(g.rows));
+    } else {
+      const curBucket = levelBuckets[levelPos] || { groups: [] };
+      if (i < 0 || i >= curBucket.groups.length) return;
+      setGroupPosInLevel(i);
+      const g = curBucket.groups[i];
+      setScheduleIdCurrent(g.scheduleId);
+      setLevelCurrent(curBucket.level);
+      setGroupNoCurrent(g.groupNo ?? 1);
+      setScheduleGrid(rowsToSchedule(g.rows));
     }
   }
+
+  /* ===== أزرار Next/Previous للّفل في وضع All ===== */
+  function goNextLevel() {
+    if (viewMode !== "all" || levelBuckets.length === 0) return;
+    const next = (levelPos + 1) % levelBuckets.length;
+    setLevelPos(next);
+    setGroupPosInLevel(0);
+    const nb = levelBuckets[next];
+    const g = nb.groups[0] || { rows: [], scheduleId: null, groupNo: 1 };
+    setScheduleIdCurrent(g.scheduleId);
+    setLevelCurrent(nb.level);
+    setGroupNoCurrent(g.groupNo ?? 1);
+    setScheduleGrid(rowsToSchedule(g.rows));
+  }
+  function goPrevLevel() {
+    if (viewMode !== "all" || levelBuckets.length === 0) return;
+    const prev = (levelPos - 1 + levelBuckets.length) % levelBuckets.length;
+    setLevelPos(prev);
+    setGroupPosInLevel(0);
+    const nb = levelBuckets[prev];
+    const g = nb.groups[0] || { rows: [], scheduleId: null, groupNo: 1 };
+    setScheduleIdCurrent(g.scheduleId);
+    setLevelCurrent(nb.level);
+    setGroupNoCurrent(g.groupNo ?? 1);
+    setScheduleGrid(rowsToSchedule(g.rows));
+  }
+
+  const headerLevel =
+    viewMode === "your" ? (yourGroups[yourGroupPos]?.level ?? levelCurrent) :
+    (levelBuckets[levelPos]?.level ?? levelCurrent);
+
+  const headerGroupNo =
+    viewMode === "your" ? (yourGroups[yourGroupPos]?.groupNo ?? groupNoCurrent) :
+    (levelBuckets[levelPos]?.groups?.[groupPosInLevel]?.groupNo ?? groupNoCurrent);
+
+  const tabsForThisView = viewMode === "your"
+    ? yourGroups
+    : (levelBuckets[levelPos]?.groups || []);
 
   return (
     <div className="container my-4">
@@ -325,7 +393,6 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         .subject-box { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; font-size:.9rem; }
         .subject-box.clickable { cursor:pointer; transition: transform .06s ease; }
         .subject-box.clickable:active { transform: scale(.98); outline: 2px solid rgba(11,58,103,.2); }
-
         .room { font-size:.75rem; color:#333; }
 
         .legend-box { display:inline-flex; align-items:center; gap:8px; margin:0 10px; font-size:.9rem; font-weight:600; color:#333; }
@@ -335,9 +402,30 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         .btn-feedback:hover { background-color:#cce5ff; }
 
         .pager { gap:10px; }
+        .nav-tabs .nav-link {
+          border: 1px solid #e1e6ef;
+          border-bottom: none;
+          margin-right: 6px;
+          border-top-left-radius: 12px;
+          border-top-right-radius: 12px;
+          color: #0b3a67;
+          font-weight: 600;
+          background: #f7f9fc;
+        }
+        .nav-tabs .nav-link.active {
+          background: #ffffff;
+          border-color: #bcd4ff #bcd4ff #ffffff;
+        }
+        .tab-card {
+          border: 1px solid #e1e6ef;
+          border-radius: 0 12px 12px 12px;
+          padding: 12px;
+          background: #ffffff;
+          box-shadow: 0 8px 24px rgba(16,24,40,.05);
+        }
       `}</style>
 
-      {/* Dropdown */}
+      {/* View dropdown */}
       <div className="d-flex justify-content-between align-items-center mb-3">
         <div className="view-dropdown dropdown">
           <button className="btn dropdown-toggle" type="button" id="viewDropdown" data-bs-toggle="dropdown" aria-expanded="false">
@@ -366,98 +454,126 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         Click any course cell to leave feedback about it, or use the button below for general notes.
       </p>
 
-      {viewMode === "all" && levelCurrent != null && (
+      {(headerLevel != null) && (
         <div className="text-center mb-2">
-          <h5 className="mb-0">Level {String(levelCurrent)}</h5>
+          <h5 className="mb-2">
+            Level {String(headerLevel)}
+            {headerGroupNo != null ? ` — Group ${headerGroupNo}` : ""}
+          </h5>
         </div>
       )}
 
+      {/* Group Tabs */}
+      {tabsForThisView.length > 1 && (
+        <>
+          <ul className="nav nav-tabs justify-content-center mb-0">
+            {tabsForThisView.map((g, i) => {
+              const isActive = (viewMode === "your" ? yourGroupPos : groupPosInLevel) === i;
+              const labelNo = g?.groupNo ?? (i + 1);
+              return (
+                <li className="nav-item" key={`${g.scheduleId ?? "x"}-${i}`}>
+                  <button
+                    className={`nav-link ${isActive ? "active" : ""}`}
+                    onClick={() => selectGroupByIndex(i)}
+                  >
+                    Group {labelNo}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+          <div className="tab-card mt-0 mb-3"></div>
+        </>
+      )}
+
+      {/* Alerts */}
       {flash.msg && <div className={`alert ${flash.type === "success" ? "alert-primary" : "alert-danger"} text-center`} role="alert">{flash.msg}</div>}
       {loading && <div className="alert alert-info text-center">Loading…</div>}
       {err && !loading && <div className="alert alert-danger text-center">{err}</div>}
 
-      <table className="table-fixed">
-        <thead>
-          <tr>
-            <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
-            {DAYS.map((d) => (
-              <th key={d} style={{ backgroundColor: "#f1f3f5" }}>{d}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {TIMES.map((time, ti) => (
-            <tr key={time}>
-              <td className="fw-bold" style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}>{time}</td>
-              {DAYS.map((day) => {
-                const key = `${day}#${ti}`;
-                if (skip[key]) return null;
-
-                const slot = scheduleGrid?.[day]?.[time];
-                if (!slot) return <td key={day}></td>;
-
-                const bg = colorOf(slot.type);
-                const rowSpan = Math.max(1, slot.duration || 1);
-
-                if (rowSpan > 1) {
-                  for (let k = 1; k < rowSpan; k++) {
-                    const nextIdx = ti + k;
-                    if (nextIdx < TIMES.length) skip[`${day}#${nextIdx}`] = true;
-                  }
-                }
-
-                return (
-                  <td key={day} rowSpan={rowSpan}>
-                    <div
-                      className="subject-box clickable"
-                      style={{ backgroundColor: bg }}
-                      onClick={() => onCellClick(slot)}
-                      title="Click to give feedback on this course"
-                    >
-                      {slot.subject}
-                      <div className="room">Room {slot.room}</div>
-                    </div>
-                  </td>
-                );
-              })}
+      {/* جدول */}
+      <div className={tabsForThisView.length > 1 ? "tab-card" : ""}>
+        <table className="table-fixed">
+          <thead>
+            <tr>
+              <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
+              {DAYS.map((d) => (
+                <th key={d} style={{ backgroundColor: "#f1f3f5" }}>{d}</th>
+              ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {TIMES.map((time, ti) => (
+              <tr key={time}>
+                <td className="fw-bold" style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}>{time}</td>
+                {DAYS.map((day) => {
+                  const key = `${day}#${ti}`;
+                  if (skip[key]) return null;
+
+                  const slot = scheduleGrid?.[day]?.[time];
+                  if (!slot) return <td key={day}></td>;
+
+                  const bg = colorOf(slot.type);
+                  const rowSpan = Math.max(1, slot.duration || 1);
+
+                  if (rowSpan > 1) {
+                    for (let k = 1; k < rowSpan; k++) {
+                      const nextIdx = ti + k;
+                      if (nextIdx < TIMES.length) skip[`${day}#${nextIdx}`] = true;
+                    }
+                  }
+
+                  return (
+                    <td key={day} rowSpan={rowSpan}>
+                      <div
+                        className="subject-box clickable"
+                        style={{ backgroundColor: bg }}
+                        onClick={() => onCellClick(slot)}
+                        title="Click to give feedback on this course"
+                      >
+                        {slot.subject}
+                        <div className="room">Room {slot.room}</div>
+                      </div>
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
 
       {/* Legend */}
       <div className="d-flex justify-content-center align-items-center mt-4 flex-wrap gap-3">
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div><span>Core / Mandatory</span></div>
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.elective }}></div><span>Elective</span></div>
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div><span>Core / Lecture</span></div>
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.tutorial }}></div><span>Tutorial</span></div>
         <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div><span>Lab</span></div>
       </div>
 
-      {/* زر فيدباك عام */}
-      {viewMode === "your" && (
-        <div className="text-center mt-3">
-          <button
-            className="btn btn-feedback"
-            onClick={() => { setSelectedTarget(null); setComment(""); setShowModal(true); }}
-            disabled={!scheduleIdCurrent}
-            title={!scheduleIdCurrent ? "Schedule ID is missing" : "Give feedback"}
-          >
-            Give Feedback
-          </button>
-        </div>
-      )}
+      {/* زر الفيدباك */}
+      <div className="text-center mt-3">
+        <button
+          className="btn btn-feedback"
+          onClick={() => { setSelectedTarget(null); setComment(""); setShowModal(true); }}
+          disabled={!scheduleIdCurrent}
+          title={!scheduleIdCurrent ? "Schedule ID is missing — switch group/level or reload." : "Give feedback"}
+        >
+          Give Feedback
+        </button>
+      </div>
 
-      {/* Previous/Next */}
-      {viewMode === "all" && allSchedules.length > 0 && (
+      {/* Pager للّفل في وضع All */}
+      {viewMode === "all" && levelBuckets.length > 0 && (
         <div className="d-flex justify-content-center pager mt-4">
-          <button className="btn btn-outline-secondary" onClick={goPrev} disabled={allSchedules.length <= 1}>Previous</button>
+          <button className="btn btn-outline-secondary" onClick={goPrevLevel} disabled={levelBuckets.length <= 1}>Previous Level</button>
           <div className="small text-muted align-self-center mx-2">
-            {currentIndex + 1} / {allSchedules.length}
+            {levelPos + 1} / {levelBuckets.length}
           </div>
-          <button className="btn btn-outline-primary" onClick={goNext} disabled={allSchedules.length <= 1}>Next</button>
+          <button className="btn btn-outline-primary" onClick={goNextLevel} disabled={levelBuckets.length <= 1}>Next Level</button>
         </div>
       )}
 
-      {/* Modal (نفس الديزاين) */}
+      {/* Modal */}
       {showModal && (
         <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
           <div className="modal-dialog modal-dialog-centered">
@@ -504,7 +620,53 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
                     border: "none",
                     opacity: submitting || !comment.trim() || !scheduleIdCurrent ? 0.7 : 1,
                   }}
-                  onClick={submitFeedback}
+                  onClick={async () => {
+                    setSubmitting(true);
+                    setFlash({ type: "", msg: "" });
+                    try {
+                      const token = localStorage.getItem("token");
+                      const userRaw = localStorage.getItem("user");
+                      const user = userRaw ? JSON.parse(userRaw) : {};
+                      const userId = user?.id ?? user?._id ?? user?.UserID ?? user?.StudentID ?? null;
+                      const role =
+                        user?.role || user?.Role || user?.userRole || (user?.isAdmin ? "admin" : "student");
+
+                      if (!token) throw new Error("Missing auth token");
+                      if (!userId) throw new Error("Missing user id");
+                      if (!scheduleIdCurrent) throw new Error("Missing schedule id");
+                      if (!comment.trim()) throw new Error("Write your feedback first");
+
+                      const body = {
+                        comment: comment.trim(),
+                        scheduleId: scheduleIdCurrent,
+                        courseId: null,
+                        role,
+                        userId,
+                      };
+
+                      const res = await fetch(`${apiBase}/api/feedback`, {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization: `Bearer ${token}`,
+                        },
+                        body: JSON.stringify(body),
+                      });
+
+                      const data = await res.json().catch(() => ({}));
+                      if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+                      setFlash({ type: "success", msg: "Feedback submitted successfully." });
+                      setShowModal(false);
+                      setComment("");
+                      setSelectedTarget(null);
+                    } catch (e) {
+                      setFlash({ type: "danger", msg: e.message || "Failed to submit feedback." });
+                    } finally {
+                      setSubmitting(false);
+                      setTimeout(() => setFlash({ type: "", msg: "" }), 4000);
+                    }
+                  }}
                   disabled={submitting || !comment.trim() || !scheduleIdCurrent}
                 >
                   {submitting ? "Submitting…" : "Submit"}

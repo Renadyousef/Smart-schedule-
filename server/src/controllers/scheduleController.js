@@ -1,6 +1,172 @@
 // server/controllers/scheduleController.js
 import pool from "../../DataBase_config/DB_config.js";
 import OpenAI from "openai";
+import jwt from "jsonwebtoken";
+
+function resolveUserId(req) {
+  let userId =
+    req.user?.id ??
+    req.user?.UserID ??
+    req.user?.userId ??
+    req.user?.sub ??
+    null;
+
+  if (!userId) {
+    const authHeader = req.headers.authorization;
+    const token = authHeader?.startsWith("Bearer ") ? authHeader.split(" ")[1] : null;
+    if (token) {
+      const decoded = jwt.decode(token);
+      userId =
+        decoded?.id ??
+        decoded?.UserID ??
+        decoded?.userId ??
+        decoded?.sub ??
+        null;
+    }
+  }
+
+  return userId;
+}
+
+async function nextGroupNo(client, scId, level) {
+  if (level === null || level === undefined) return 1;
+  const r = await client.query(
+    `SELECT COALESCE(MAX("GroupNo"), 0) + 1 AS "next"
+       FROM "Schedule"
+      WHERE "SchedulingCommitteeID"=$1
+        AND "Level"=$2`,
+    [scId, level]
+  );
+  return r.rows[0]?.next ?? 1;
+}
+
+const THREE_LECTURE_DAYS = ["Sunday", "Tuesday", "Thursday"];
+
+const GROUP_A_COURSES = new Set([
+  "SWE211",
+  "SWE314",
+  "SWE312",
+  "SWE321",
+  "SWE381",
+  "SWE482",
+  "SWE434",
+  "SWE466",
+]);
+
+const GROUP_B_COURSES = new Set([
+  "SWE455",
+  "SWE333",
+]);
+
+const IRREGULAR_LEVELS = new Set([4, 6, 8]);
+
+const DEFAULT_LECTURE_START = "08:00";
+const DEFAULT_TUTORIAL_START = "10:00";
+const VALID_DAYS = new Set(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]);
+
+function formatTime(hour, minute) {
+  return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
+}
+
+function splitConnectedBlocks(day, startHour, startMinute, type, hours) {
+  const slots = [];
+  for (let i = 0; i < hours; i += 1) {
+    const blockStartHour = startHour + i;
+    const minuteWithOffset = startMinute + i * 60;
+    const normalizedStartHour = startHour + Math.floor(minuteWithOffset / 60);
+    const normalizedStartMinute = minuteWithOffset % 60;
+    const start = formatTime(normalizedStartHour, normalizedStartMinute);
+
+    const endMinutesTotal = normalizedStartMinute + 50;
+    const endHour = normalizedStartHour + Math.floor(endMinutesTotal / 60);
+    const endMinute = endMinutesTotal % 60;
+    const end = formatTime(endHour, endMinute);
+    slots.push({ day, start, end, type });
+  }
+  return slots;
+}
+
+function parseStart(timeString, fallback) {
+  if (!timeString) return fallback;
+  const [h, m = "0"] = timeString.split(":").map(Number);
+  return {
+    hour: Number.isFinite(h) ? h : fallback.hour,
+    minute: Number.isFinite(m) ? m : fallback.minute,
+  };
+}
+
+function lecture1h(day, start) {
+  return splitConnectedBlocks(day, start.hour, start.minute, "Lecture", 1);
+}
+
+function lecture2h(day, start) {
+  return splitConnectedBlocks(day, start.hour, start.minute, "Lecture", 2);
+}
+
+function tutorial1h(day, start) {
+  return splitConnectedBlocks(day, start.hour, start.minute, "Tutorial", 1);
+}
+
+function threeLecturePattern(start) {
+  return THREE_LECTURE_DAYS.flatMap((day) => lecture1h(day, start));
+}
+
+function generateCourseSlots(course) {
+  const code = (course.course_code || "").toUpperCase();
+
+  if (GROUP_A_COURSES.has(code) || GROUP_B_COURSES.has(code)) {
+    return [];
+  }
+
+  const lectureStartParsed = parseStart(course.start, {
+    hour: Number(DEFAULT_LECTURE_START.split(":")[0]),
+    minute: Number(DEFAULT_LECTURE_START.split(":")[1]),
+  });
+
+  const tutorialStartParsed = {
+    hour: Number(DEFAULT_TUTORIAL_START.split(":")[0]),
+    minute: Number(DEFAULT_TUTORIAL_START.split(":")[1]),
+  };
+
+  if (code === "SWE477") {
+    return lecture2h("Sunday", lectureStartParsed);
+  }
+
+  if (code === "SWE444") {
+    return [
+      ...lecture2h("Sunday", lectureStartParsed),
+      ...lecture2h("Tuesday", lectureStartParsed),
+    ];
+  }
+
+  return [
+    ...threeLecturePattern(lectureStartParsed),
+    ...tutorial1h("Monday", tutorialStartParsed),
+  ];
+}
+
+function describeCourseRequirements(course) {
+  const code = (course.course_code || "").toUpperCase();
+  const name = course.course_name || "";
+  const section = course.section_number ?? "?";
+
+  if (GROUP_A_COURSES.has(code)) {
+    return `[${code}] ${name} (Section ${section}): OUTPUT FOUR SLOTS: (1) Sunday lecture 50 minutes, (2) Tuesday lecture 50 minutes, (3) Thursday lecture 50 minutes, and (4) one tutorial 50 minutes between 08:00 and 13:00 (prefer Monday or Wednesday if free). Lectures may start at different times but must remain within working hours and keep the 10-minute gap. Do not omit any of the four required meetings; if a time conflicts, move the slot to the nearest available 50-minute block while keeping the prescribed day pattern.`;
+  }
+
+  if (GROUP_B_COURSES.has(code)) {
+    return `[${code}] ${name} (Section ${section}): Provide three slots total. Option A (dispersed): two separate 50-minute lectures on one of the pairs (Sunday + Tuesday), (Sunday + Thursday), or (Tuesday + Thursday) plus one 50-minute tutorial between 08:00 and 13:00 (any free day). Option B (connected): one 2x50-minute connected lecture on Monday or Wednesday (covering two consecutive slots) plus one 50-minute tutorial between 08:00 and 13:00. Choose whichever option keeps the timetable conflict-free and include every required meeting.`;
+  }
+
+  const slots = generateCourseSlots(course);
+  if (!slots.length) return null;
+
+  const body = slots
+    .map((slot) => `${slot.day} ${slot.start}-${slot.end} ${slot.type}`)
+    .join("; ");
+
+  return `[${code}] ${name} (Section ${section}): ${body}`;
+}
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -24,21 +190,67 @@ function norm(t) {
   return t.length === 5 ? `${t}:00` : t;
 }
 
+function ensureScheduleOwnershipRow(row, res) {
+  if (!row.rowCount) {
+    res.status(404).json({ msg: "Slot not found" });
+    return false;
+  }
+  if (row.rows[0].Status === "shared" || row.rows[0].Status === "approved") {
+    res
+      .status(409)
+      .json({ msg: "Schedule locked", error: "Approved or shared schedules cannot be edited" });
+    return false;
+  }
+  return true;
+}
+
+function validateDayTime(day, start, end) {
+  if (!VALID_DAYS.has(day)) {
+    return "Invalid day";
+  }
+  if (!start || !end) {
+    return "Start and end times are required";
+  }
+  const [sh = "0", sm = "0"] = String(start).split(":").map(Number);
+  const [eh = "0", em = "0"] = String(end).split(":").map(Number);
+  if (![sh, sm, eh, em].every((v) => Number.isFinite(v))) {
+    return "Invalid time format";
+  }
+  const startMinutes = sh * 60 + sm;
+  const endMinutes = eh * 60 + em;
+  if (endMinutes <= startMinutes) {
+    return "End time must be after start time";
+  }
+  return null;
+}
+
 /* ---------- 0) Init / Get Schedule ---------- */
 export const initSchedule = async (req, res) => {
   try {
-    const scId = await getSchedulingCommitteeId(req.user.id);
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ msg: "Unauthorized", error: "Missing user context" });
+    }
 
-    const existing = await pool.query(
-      `SELECT "ScheduleID"
-         FROM "Schedule"
-        WHERE "SchedulingCommitteeID"=$1
-          AND "Status"<>'shared'
-        LIMIT 1`,
-      [scId]
-    );
-    if (existing.rowCount) {
-      return res.json({ scheduleId: existing.rows[0].ScheduleID });
+    const scId = await getSchedulingCommitteeId(userId);
+    const forceNew =
+      req.query?.forceNew === "true" ||
+      req.body?.forceNew === true ||
+      req.body?.forceNew === "true";
+
+    if (!forceNew) {
+      const existing = await pool.query(
+        `SELECT "ScheduleID"
+           FROM "Schedule"
+          WHERE "SchedulingCommitteeID"=$1
+            AND "Status"<>'shared'
+          ORDER BY "ScheduleID" DESC
+          LIMIT 1`,
+        [scId]
+      );
+      if (existing.rowCount) {
+        return res.json({ scheduleId: existing.rows[0].ScheduleID });
+      }
     }
 
     const s = await pool.query(
@@ -56,9 +268,11 @@ export const initSchedule = async (req, res) => {
 
 /* ---------- 1) External Slot ---------- */
 export const addExternalSlot = async (req, res) => {
+  const client = await pool.connect();
   try {
+    await client.query("BEGIN");
+
     const {
-      scheduleId,
       courseCode,
       courseName,
       sectionNumber,
@@ -68,17 +282,83 @@ export const addExternalSlot = async (req, res) => {
       endTime,
     } = req.body;
 
-    const scId = await getSchedulingCommitteeId(req.user.id);
+    let { scheduleId } = req.body;
 
-    const sCheck = await pool.query(
-      `SELECT "ScheduleID" FROM "Schedule"
-       WHERE "ScheduleID"=$1 AND "SchedulingCommitteeID"=$2`,
-      [scheduleId, scId]
-    );
-    if (!sCheck.rowCount)
-      return res.status(403).json({ msg: "Schedule not owned by this committee" });
+    const userId = resolveUserId(req);
+    if (!userId) {
+      try {
+        await client.query("ROLLBACK");
+      } catch {
+        /* ignore */
+      }
+      return res.status(401).json({ msg: "Unauthorized", error: "Missing user context" });
+    }
 
-    const existing = await pool.query(
+    const scId = await getSchedulingCommitteeId(userId);
+
+    const scheduleRow = scheduleId
+      ? await client.query(
+          `SELECT "Level","Status"
+             FROM "Schedule"
+            WHERE "ScheduleID"=$1 AND "SchedulingCommitteeID"=$2
+            FOR UPDATE`,
+          [scheduleId, scId]
+        )
+      : { rowCount: 0, rows: [] };
+
+    let scheduleStatus = 'draft';
+    let currentLevel = null;
+    let workingScheduleId = scheduleId;
+
+    if (!scheduleRow.rowCount) {
+      const createdSchedule = await client.query(
+        `INSERT INTO "Schedule"("SchedulingCommitteeID","Status")
+         VALUES ($1,'draft')
+         RETURNING "ScheduleID","Level","Status"`,
+        [scId]
+      );
+      workingScheduleId = createdSchedule.rows[0].ScheduleID;
+      scheduleId = workingScheduleId;
+      scheduleStatus = createdSchedule.rows[0].Status;
+      currentLevel = createdSchedule.rows[0].Level ?? null;
+    } else {
+      scheduleStatus = scheduleRow.rows[0].Status;
+      currentLevel = scheduleRow.rows[0].Level ?? null;
+    }
+
+    if (!workingScheduleId) {
+      workingScheduleId = scheduleId;
+    }
+
+    if (scheduleStatus !== 'draft') {
+      const levelForNew = currentLevel ?? null;
+      const nextGroup = levelForNew !== null ? await nextGroupNo(client, scId, levelForNew) : null;
+      const newSchedule = await client.query(
+        `INSERT INTO "Schedule"("SchedulingCommitteeID","Status","Level","GroupNo")
+         VALUES ($1,'draft',$2,$3)
+         RETURNING "ScheduleID"`,
+        [scId, levelForNew, nextGroup]
+      );
+      workingScheduleId = newSchedule.rows[0].ScheduleID;
+      scheduleId = workingScheduleId;
+      scheduleStatus = 'draft';
+    }
+
+    if (currentLevel === null) {
+      const inferred = await client.query(
+        `SELECT DISTINCT c.level
+           FROM "ScheduleSlot" s
+           JOIN courses c ON c."CourseID" = s."CourseID"
+          WHERE s."ScheduleID"=$1
+          LIMIT 1`,
+        [scheduleId]
+      );
+      if (inferred.rowCount) {
+        currentLevel = inferred.rows[0].level ?? null;
+      }
+    }
+
+    const existing = await client.query(
       `SELECT "CourseID", level FROM courses WHERE course_code=$1`,
       [courseCode]
     );
@@ -88,7 +368,7 @@ export const addExternalSlot = async (req, res) => {
       courseId = existing.rows[0].CourseID;
       level = existing.rows[0].level ?? null;
     } else {
-      const c = await pool.query(
+      const c = await client.query(
         `INSERT INTO courses(course_code, course_name, credit_hours, course_type, is_external, level)
          VALUES ($1,$2,3,'Mandatory',true,NULL)
          RETURNING "CourseID", level`,
@@ -99,30 +379,82 @@ export const addExternalSlot = async (req, res) => {
     }
 
     if (level !== null) {
-      await pool.query(
-        `UPDATE "Schedule"
-            SET "Level"=$1
-          WHERE "ScheduleID"=$2 AND "Level" IS NULL`,
-        [level, scheduleId]
-      );
+      if (currentLevel === null) {
+        const groupNo = await nextGroupNo(client, scId, level);
+        await client.query(
+          `UPDATE "Schedule"
+              SET "Level"=$1,
+                  "GroupNo"=COALESCE("GroupNo", $3)
+            WHERE "ScheduleID"=$2`,
+          [level, scheduleId, groupNo]
+        );
+        currentLevel = level;
+      } else if (currentLevel !== level) {
+        const existingForLevel = await client.query(
+          `SELECT "ScheduleID","GroupNo"
+             FROM "Schedule"
+            WHERE "SchedulingCommitteeID"=$1
+              AND "Level"=$2
+              AND "Status"='draft'
+            ORDER BY "ScheduleID" DESC
+            LIMIT 1`,
+          [scId, level]
+        );
+
+        if (existingForLevel.rowCount) {
+          workingScheduleId = existingForLevel.rows[0].ScheduleID;
+          const groupNo = existingForLevel.rows[0].GroupNo;
+          if (groupNo === null) {
+            const next = await nextGroupNo(client, scId, level);
+            await client.query(
+              `UPDATE "Schedule" SET "GroupNo"=$1 WHERE "ScheduleID"=$2`,
+              [next, workingScheduleId]
+            );
+          }
+        } else {
+          const nextGroup = await nextGroupNo(client, scId, level);
+          const newSchedule = await client.query(
+            `INSERT INTO "Schedule"("SchedulingCommitteeID","Status","Level","GroupNo")
+             VALUES ($1,'draft',$2,$3)
+             RETURNING "ScheduleID"`,
+            [scId, level, nextGroup]
+          );
+          workingScheduleId = newSchedule.rows[0].ScheduleID;
+        }
+
+        currentLevel = level;
+      }
     }
 
-    const s = await pool.query(
+    const slot = await client.query(
       `INSERT INTO "ScheduleSlot"("ScheduleID","CourseID","DayOfWeek","StartTime","EndTime")
        VALUES ($1,$2,$3,$4,$5) RETURNING "SlotID"`,
-      [scheduleId, courseId, dayOfWeek, norm(startTime), norm(endTime)]
+      [workingScheduleId, courseId, dayOfWeek, norm(startTime), norm(endTime)]
     );
 
-    await pool.query(
+    await client.query(
       `INSERT INTO "Sections"("ScheduleID","CourseID","SlotID","SectionNumber","Capacity","InstructorID")
        VALUES ($1,$2,$3,$4,$5,NULL)`,
-      [scheduleId, courseId, s.rows[0].SlotID, sectionNumber || 1, capacity || 30]
+      [workingScheduleId, courseId, slot.rows[0].SlotID, sectionNumber || 1, capacity || 30]
     );
 
-    res.status(201).json({ msg: "External slot added", level });
+    await client.query("COMMIT");
+
+    res.status(201).json({
+      msg: "External slot added",
+      level: currentLevel,
+      scheduleId: workingScheduleId,
+    });
   } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
     console.error("addExternalSlot:", e);
     res.status(500).json({ msg: "Failed to add external slot", error: e.message });
+  } finally {
+    client.release();
   }
 };
 
@@ -157,23 +489,23 @@ export const autoListAndPrepareInternal = async (req, res) => {
   try {
     const { scheduleId } = req.params;
 
-    const extLevel = await client.query(
-      `SELECT DISTINCT c.level
-         FROM courses c
-         JOIN "ScheduleSlot" s ON s."CourseID"=c."CourseID"
-        WHERE s."ScheduleID"=$1 AND c.is_external=true
-        LIMIT 1`,
+    const scRow = await client.query(
+      `SELECT "Level" FROM "Schedule" WHERE "ScheduleID"=$1`,
       [scheduleId]
     );
 
-    let level = extLevel.rows[0]?.level ?? null;
+    let level = scRow.rows[0]?.Level ?? null;
 
     if (level === null) {
-      const sc = await client.query(
-        `SELECT "Level" FROM "Schedule" WHERE "ScheduleID"=$1`,
+      const extLevel = await client.query(
+        `SELECT DISTINCT c.level
+           FROM courses c
+           JOIN "ScheduleSlot" s ON s."CourseID"=c."CourseID"
+          WHERE s."ScheduleID"=$1 AND c.is_external=true
+          LIMIT 1`,
         [scheduleId]
       );
-      level = sc.rows[0]?.Level ?? null;
+      level = extLevel.rows[0]?.level ?? null;
     }
 
     if (level === null) {
@@ -247,18 +579,37 @@ export const generatePreliminarySchedule = async (req, res) => {
               c.course_name,
               COALESCE(sec."Capacity",30) as capacity,
               COALESCE(sec."SectionNumber",1) as section_number
-         FROM "Sections" sec
-         JOIN courses c ON c."CourseID"=sec."CourseID"
-        WHERE sec."ScheduleID"=$1
-          AND c.is_external=false
-          AND sec."SlotID" IS NULL
-        ORDER BY c.course_code`,
+        FROM "Sections" sec
+        JOIN courses c ON c."CourseID"=sec."CourseID"
+       WHERE sec."ScheduleID"=$1
+         AND c.is_external=false
+         AND sec."SlotID" IS NULL
+       ORDER BY c.course_code`,
       [scheduleId]
     );
 
-    if (toSchedule.rowCount === 0) {
+    const skipCodes = ["SWE479", "SWE496", "SWE497"];
+    const rowsFiltered = toSchedule.rows.filter(
+      (row) => !skipCodes.includes((row.course_code || "").toUpperCase())
+    );
+
+    if (rowsFiltered.length === 0) {
       return res.json({ msg: "Nothing to schedule", count: 0 });
     }
+
+    if (rowsFiltered.length !== toSchedule.rows.length) {
+      console.log(
+        "Skipped courses from scheduling:",
+        toSchedule.rows
+          .filter((row) => skipCodes.includes((row.course_code || "").toUpperCase()))
+          .map((row) => row.course_code)
+      );
+    }
+
+    const requirementText = rowsFiltered
+      .map(describeCourseRequirements)
+      .filter(Boolean)
+      .join("\n");
 
     // Load rules (committee-specific + global)
     const rulesDb = await pool.query(
@@ -276,22 +627,23 @@ export const generatePreliminarySchedule = async (req, res) => {
     ).join("\n");
 
     const fixedPattern = `
-Time Slots:
-- Each lecture slot is 50min followed by a 10min break (e.g., 08:00-08:50, 09:00-09:50, ...).
-- Two-hour classes/labs use continuous 120min (e.g., 09:00-10:50).
-- Global lunch break 12:00–13:00 must stay empty.
+Time/slot rules:
+- 1 hour = 50 minutes (always include the 10 minute gap afterwards).
+- 2 hours connected = two back-to-back 50 minute slots (e.g., 08:00-08:50 AND 09:00-09:50). Treat this as one meeting that spans two slots.
+- Keep the global lunch break 12:00–13:00 empty.
 
-Course-Specific Patterns (24h time):
-- CSC111 or CSC113: 3×1h lectures (on different days), 1×1h tutorial, 1×2h lab.
-- SWE477 or any IC course: 1×2h lecture.
-- SWE444: 2×2h lectures (on two different days).
-- MATH* or PHYS*: 3×1h lectures (on different days) + 1×2h tutorial.
-- OPER122: 1×2h lecture + 1×2h tutorial.
-- SWE455: 2×1h lectures (on different days) + 1×1h tutorial.
-- Other courses: default = 3×1h lectures (on different days) + 1×1h tutorial.
+Lecture spacing rules:
+- Do not place two 1-hour lectures for the same course on the same day unless the connected option is explicitly specified.
+- Default 3-lecture patterns use Sunday, Tuesday, Thursday (one lecture per day).
 
-Extra constraints:
-- Do NOT schedule two 1h lectures of the same course on the same day.
+Course-specific patterns (24h clock):
+- SWE477: one 2h connected lecture each week.
+- SWE444: two 2h connected lectures on different days in the same week.
+- Group A (SWE211, SWE314, SWE312, SWE321, SWE381, SWE482, SWE434, SWE466): exactly three 50-minute lectures on Sunday, Tuesday, and Thursday. The three lectures can start at different times as long as they maintain the 10-minute gap afterwards. Add one 50-minute tutorial between 08:00 and 13:00 on any available day.
+- Group A courses must output four slots total (three lectures + one tutorial). If a preferred day/time is taken, move the session but keep the overall pattern.
+- Group B (SWE455, SWE333): choose either two dispersed 50-minute lectures on (Sunday + Tuesday), (Sunday + Thursday), or (Tuesday + Thursday), OR use one connected 2x50-minute block on Monday or Wednesday. Add one 50-minute tutorial between 08:00 and 13:00 on any available day.
+- Group B courses must output three slots total (two lecture hours + one tutorial hour). Maintain the chosen option's structure even if you need to shift the exact start time.
+- All other internal courses: three separate 50-minute lectures on Sunday, Tuesday, Thursday plus one 50-minute tutorial (default to morning slots).
 `;
 
     const prompt = `
@@ -304,7 +656,10 @@ Scheduling Rules from database:
 ${allRules || "None"}
 
 Occupied slots: ${JSON.stringify(occupied.rows)}
-Internal courses needing schedule: ${JSON.stringify(toSchedule.rows)}
+Internal courses needing schedule: ${JSON.stringify(rowsFiltered)}
+
+Course requirements summary:
+${requirementText || "None"}
 
 Return ONLY JSON array:
 [{"section_id":number,"day":"Sunday|Monday|...","start":"HH:MM","end":"HH:MM"}]
@@ -323,9 +678,33 @@ Return ONLY JSON array:
     const jsonMatch = resultsRaw.match(/\[[\s\S]*\]/);
     const results = JSON.parse(jsonMatch ? jsonMatch[0] : resultsRaw);
 
+    const conflicts = [];
+    let placedCount = 0;
+
     for (const a of results) {
       const start = norm(a.start);
       const end = norm(a.end);
+
+      const overlap = await pool.query(
+        `SELECT 1
+           FROM "ScheduleSlot"
+          WHERE "ScheduleID"=$1
+            AND "DayOfWeek"=$2
+            AND NOT ($4 <= "StartTime" OR $3 >= "EndTime")
+          LIMIT 1`,
+        [scheduleId, a.day, start, end]
+      );
+
+      if (overlap.rowCount) {
+        conflicts.push({
+          section_id: a.section_id,
+          day: a.day,
+          start: a.start,
+          end: a.end,
+          reason: "conflicts with existing slot",
+        });
+        continue;
+      }
 
       const slot = await pool.query(
         `INSERT INTO "ScheduleSlot"("ScheduleID","CourseID","DayOfWeek","StartTime","EndTime")
@@ -338,9 +717,22 @@ Return ONLY JSON array:
         `UPDATE "Sections" SET "SlotID"=$1 WHERE "SectionID"=$2`,
         [slot.rows[0].SlotID, a.section_id]
       );
+
+      placedCount += 1;
     }
 
-    res.json({ msg: "Preliminary schedule generated", count: results.length });
+    if (placedCount > 0) {
+      await pool.query(
+        `UPDATE "Schedule" SET "Status"='generated' WHERE "ScheduleID"=$1`,
+        [scheduleId]
+      );
+    }
+
+    res.json({
+      msg: placedCount ? "Preliminary schedule generated" : "No slots generated",
+      placed: placedCount,
+      skipped: conflicts,
+    });
   } catch (e) {
     console.error("generatePreliminarySchedule:", e);
     res.status(500).json({ msg: "Failed to generate schedule", error: e.message });
@@ -352,13 +744,16 @@ export const listAllSlotsForGrid = async (req, res) => {
   try {
     const { scheduleId } = req.params;
     const r = await pool.query(
-      `SELECT c.is_external,
-              c.course_code, c.course_name,
-              COALESCE(sec."SectionNumber",1) as section_number,
-              COALESCE(sec."Capacity",30) as capacity,
-              s."DayOfWeek"  as day,
-              s."StartTime"  as start,
-              s."EndTime"    as end
+      `SELECT s."SlotID"       AS slot_id,
+              sec."SectionID"  AS section_id,
+              c.is_external,
+              c.course_code,
+              c.course_name,
+              COALESCE(sec."SectionNumber",1) AS section_number,
+              COALESCE(sec."Capacity",30)     AS capacity,
+              s."DayOfWeek"   AS day,
+              s."StartTime"   AS start,
+              s."EndTime"     AS end
        FROM "ScheduleSlot" s
        JOIN courses c ON c."CourseID"=s."CourseID"
        LEFT JOIN "Sections" sec ON sec."SlotID"=s."SlotID"
@@ -386,20 +781,378 @@ export const shareSchedule = async (req, res) => {
     res.status(500).json({ msg: "Failed to share schedule", error: e.message });
   }
 };
+
+export const approveSchedule = async (req, res) => {
+  try {
+    const scheduleId = Number(req.params.scheduleId);
+    if (!Number.isFinite(scheduleId)) {
+      return res.status(400).json({ msg: "Invalid schedule id" });
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ msg: "Unauthorized", error: "Missing user context" });
+    }
+
+    const scId = await getSchedulingCommitteeId(userId);
+
+    const current = await pool.query(
+      `SELECT "Status"
+         FROM "Schedule"
+        WHERE "ScheduleID"=$1 AND "SchedulingCommitteeID"=$2`,
+      [scheduleId, scId]
+    );
+
+    if (!current.rowCount) {
+      return res.status(404).json({ msg: "Schedule not found" });
+    }
+
+    const status = current.rows[0].Status;
+    if (status === "shared") {
+      return res.status(409).json({ msg: "Schedule already shared" });
+    }
+    if (status === "approved") {
+      return res.status(200).json({ msg: "Schedule already approved" });
+    }
+    if (status !== "generated") {
+      return res
+        .status(409)
+        .json({ msg: "Schedule must be generated before approval", status });
+    }
+
+    await pool.query(
+      `UPDATE "Schedule" SET "Status"='approved' WHERE "ScheduleID"=$1`,
+      [scheduleId]
+    );
+
+    res.json({ msg: "Schedule approved" });
+  } catch (e) {
+    console.error("approveSchedule:", e);
+    res.status(500).json({ msg: "Failed to approve schedule", error: e.message });
+  }
+};
+
+export const createManualSlot = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const {
+      scheduleId,
+      courseCode,
+      courseName,
+      sectionNumber,
+      capacity,
+      day,
+      start,
+      end,
+      isExternal = true,
+      level = null,
+    } = req.body ?? {};
+
+    const normalizedIsExternal = isExternal === true;
+    const courseType = normalizedIsExternal ? "Mandatory" : "Elective";
+
+    const scheduleIdNumeric = Number(scheduleId);
+    if (!Number.isFinite(scheduleIdNumeric)) {
+      return res.status(400).json({ msg: "Invalid schedule id" });
+    }
+
+    if (!courseCode || !courseName) {
+      return res.status(400).json({ msg: "Course code and name are required" });
+    }
+
+    const validationError = validateDayTime(day, start, end);
+    if (validationError) {
+      return res.status(400).json({ msg: validationError });
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ msg: "Unauthorized", error: "Missing user context" });
+    }
+
+    const scId = await getSchedulingCommitteeId(userId);
+
+    await client.query("BEGIN");
+
+    const scheduleRow = await client.query(
+      `SELECT "ScheduleID","Status","Level"
+         FROM "Schedule"
+        WHERE "ScheduleID"=$1 AND "SchedulingCommitteeID"=$2
+        FOR UPDATE`,
+      [scheduleIdNumeric, scId]
+    );
+
+    if (!ensureScheduleOwnershipRow(scheduleRow, res)) {
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    const normalizedCode = courseCode.trim().toUpperCase();
+    const trimmedName = courseName.trim();
+
+    const courseRow = await client.query(
+      `SELECT "CourseID", course_name, level, is_external, course_type
+          FROM courses
+         WHERE UPPER(course_code)=$1`,
+      [normalizedCode]
+    );
+
+    let courseId;
+    let courseLevel = courseRow.rows[0]?.level ?? null;
+    const courseTypeDb = courseRow.rows[0]?.course_type ?? null;
+    const courseExternalDb = courseRow.rows[0]?.is_external ?? null;
+
+    if (courseRow.rowCount) {
+      courseId = courseRow.rows[0].CourseID;
+      const existingName = courseRow.rows[0].course_name ?? "";
+      if (trimmedName && trimmedName !== existingName) {
+        await client.query(
+          `UPDATE courses SET course_name=$1 WHERE "CourseID"=$2`,
+          [trimmedName, courseId]
+        );
+      }
+      if (level !== null && level !== undefined && courseLevel === null) {
+        await client.query(
+          `UPDATE courses SET level=$1 WHERE "CourseID"=$2`,
+          [level, courseId]
+        );
+        courseLevel = level;
+      }
+      const normalizedCourseTypeDb = courseTypeDb ? String(courseTypeDb).trim().toLowerCase() : null;
+      if (!normalizedCourseTypeDb || normalizedCourseTypeDb !== courseType.toLowerCase()) {
+        await client.query(
+          `UPDATE courses SET course_type=$1 WHERE "CourseID"=$2`,
+          [courseType, courseId]
+        );
+      }
+      if (courseExternalDb !== normalizedIsExternal) {
+        await client.query(
+          `UPDATE courses SET is_external=$1 WHERE "CourseID"=$2`,
+          [normalizedIsExternal, courseId]
+        );
+      }
+    } else {
+      const insertedCourse = await client.query(
+        `INSERT INTO courses(course_code, course_name, credit_hours, course_type, is_external, level)
+         VALUES ($1,$2,3,$3,$4,$5)
+         RETURNING "CourseID", level`,
+        [normalizedCode, trimmedName, courseType, normalizedIsExternal, level ?? null]
+      );
+      courseId = insertedCourse.rows[0].CourseID;
+      courseLevel = insertedCourse.rows[0].level ?? null;
+    }
+
+    const currentLevel = scheduleRow.rows[0].Level ?? null;
+    const requestedLevel = level ?? courseLevel;
+
+    if (currentLevel !== null && requestedLevel !== null && currentLevel !== requestedLevel) {
+      await client.query("ROLLBACK");
+      return res.status(400).json({ msg: "Course level does not match schedule level" });
+    }
+
+    if (courseLevel === null && level !== null && level !== undefined) {
+      courseLevel = level;
+    }
+
+    if (currentLevel === null && courseLevel !== null) {
+      const nextGroup = await nextGroupNo(client, scId, courseLevel);
+      await client.query(
+        `UPDATE "Schedule"
+            SET "Level"=$1,
+                "GroupNo"=COALESCE("GroupNo", $3)
+          WHERE "ScheduleID"=$2`,
+        [courseLevel, scheduleIdNumeric, nextGroup]
+      );
+    }
+
+    const slot = await client.query(
+      `INSERT INTO "ScheduleSlot"("ScheduleID","CourseID","DayOfWeek","StartTime","EndTime")
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING "SlotID"`,
+      [scheduleIdNumeric, courseId, day, norm(start), norm(end)]
+    );
+
+    const sectionNum = Number(sectionNumber ?? 1);
+    const capacityNum = Number(capacity ?? 30);
+
+    await client.query(
+      `INSERT INTO "Sections"("ScheduleID","CourseID","SlotID","SectionNumber","Capacity","InstructorID")
+       VALUES ($1,$2,$3,$4,$5,NULL)`,
+      [
+        scheduleIdNumeric,
+        courseId,
+        slot.rows[0].SlotID,
+        Number.isFinite(sectionNum) && sectionNum > 0 ? sectionNum : 1,
+        Number.isFinite(capacityNum) && capacityNum > 0 ? capacityNum : 30,
+      ]
+    );
+
+    await client.query("COMMIT");
+
+    res
+      .status(201)
+      .json({ msg: "Slot created", scheduleId: scheduleIdNumeric, slotId: slot.rows[0].SlotID });
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    console.error("createManualSlot:", e);
+    res.status(500).json({ msg: "Failed to add slot", error: e.message });
+  } finally {
+    client.release();
+  }
+};
+
+export const updateScheduleSlot = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const slotId = Number(req.params.slotId);
+    if (!Number.isFinite(slotId)) {
+      return res.status(400).json({ msg: "Invalid slot id" });
+    }
+
+    const { day, start, end } = req.body ?? {};
+    const validationError = validateDayTime(day, start, end);
+    if (validationError) {
+      return res.status(400).json({ msg: validationError });
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ msg: "Unauthorized", error: "Missing user context" });
+    }
+
+    const scId = await getSchedulingCommitteeId(userId);
+
+    await client.query("BEGIN");
+
+    const slotRow = await client.query(
+      `SELECT s."ScheduleID", sch."Status"
+         FROM "ScheduleSlot" s
+         JOIN "Schedule" sch ON sch."ScheduleID"=s."ScheduleID"
+        WHERE s."SlotID"=$1 AND sch."SchedulingCommitteeID"=$2
+        FOR UPDATE`,
+      [slotId, scId]
+    );
+
+    if (!ensureScheduleOwnershipRow(slotRow, res)) {
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    await client.query(
+      `UPDATE "ScheduleSlot"
+          SET "DayOfWeek"=$1,
+              "StartTime"=$2,
+              "EndTime"=$3
+        WHERE "SlotID"=$4`,
+      [day, norm(start), norm(end), slotId]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ msg: "Slot updated", scheduleId: slotRow.rows[0].ScheduleID });
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    console.error("updateScheduleSlot:", e);
+    res.status(500).json({ msg: "Failed to update slot", error: e.message });
+  } finally {
+    client.release();
+  }
+};
+
+export const removeScheduleSlot = async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const slotId = Number(req.params.slotId);
+    if (!Number.isFinite(slotId)) {
+      return res.status(400).json({ msg: "Invalid slot id" });
+    }
+
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ msg: "Unauthorized", error: "Missing user context" });
+    }
+
+    const scId = await getSchedulingCommitteeId(userId);
+
+    await client.query("BEGIN");
+
+    const slotRow = await client.query(
+      `SELECT s."ScheduleID", sch."Status"
+         FROM "ScheduleSlot" s
+         JOIN "Schedule" sch ON sch."ScheduleID"=s."ScheduleID"
+        WHERE s."SlotID"=$1 AND sch."SchedulingCommitteeID"=$2
+        FOR UPDATE`,
+      [slotId, scId]
+    );
+
+    if (!ensureScheduleOwnershipRow(slotRow, res)) {
+      await client.query("ROLLBACK");
+      return;
+    }
+
+    await client.query(
+      `UPDATE "Sections" SET "SlotID"=NULL WHERE "SlotID"=$1`,
+      [slotId]
+    );
+
+    await client.query(
+      `DELETE FROM "ScheduleSlot" WHERE "SlotID"=$1`,
+      [slotId]
+    );
+
+    await client.query("COMMIT");
+
+    res.json({ msg: "Slot removed", scheduleId: slotRow.rows[0].ScheduleID });
+  } catch (e) {
+    try {
+      await client.query("ROLLBACK");
+    } catch {
+      /* ignore */
+    }
+    console.error("removeScheduleSlot:", e);
+    res.status(500).json({ msg: "Failed to remove slot", error: e.message });
+  } finally {
+    client.release();
+  }
+};
 // server/controllers/scheduleController.js
 export const listSchedules = async (req, res) => {
   try {
-    const scId = await getSchedulingCommitteeId(req.user.id);
+    const userId = resolveUserId(req);
+    if (!userId) {
+      return res.status(401).json({ msg: "Unauthorized", error: "Missing user context" });
+    }
+
+    const scId = await getSchedulingCommitteeId(userId);
     const r = await pool.query(
-      `SELECT "ScheduleID","Level","Status","CreatedAt"
+      `SELECT "ScheduleID","Level","Status","GroupNo"
          FROM "Schedule"
         WHERE "SchedulingCommitteeID"=$1
-        ORDER BY "CreatedAt" DESC`,
+          AND "Status"<>'archived'
+        ORDER BY COALESCE("Level", 0), COALESCE("GroupNo", 0), "ScheduleID"`,
       [scId]
     );
-    res.json(r.rows);
+    const annotated = r.rows.map((row) => {
+      const levelNumber = Number(row.Level);
+      const isIrregular = Number.isFinite(levelNumber) && IRREGULAR_LEVELS.has(levelNumber);
+      return {
+        ...row,
+        IsIrregular: isIrregular,
+        IrregularNote: isIrregular
+          ? "Irregular level schedule (reserved for irregular students)."
+          : null,
+      };
+    });
+    res.json(annotated);
   } catch (e) {
     console.error("listSchedules:", e);
     res.status(500).json({ msg: "Failed to list schedules", error: e.message });
-  }
-};
+  }};
