@@ -4,12 +4,60 @@ import "bootstrap/dist/css/bootstrap.min.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
+/* ---------- helpers: robust registrarId resolver ---------- */
+function readJSON(s) { try { return s ? JSON.parse(s) : null; } catch { return null; } }
+function toInt(v) { const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : null; }
+function b64urlDecode(str){
+  try {
+    const pad = "=".repeat((4 - (str.length % 4)) % 4);
+    const base64 = (str.replace(/-/g, "+").replace(/_/g, "/") + pad);
+    return decodeURIComponent(escape(atob(base64)));
+  } catch { return ""; }
+}
+function decodeJwt(token){
+  try {
+    const [, payload] = token.split(".");
+    if (!payload) return null;
+    return JSON.parse(b64urlDecode(payload));
+  } catch { return null; }
+}
 function getAuth() {
-  const token = localStorage.getItem("token") || "";
-  const uid = Number(localStorage.getItem("userId") || localStorage.getItem("UserID") || 0);
-  return { token, registrarId: uid || undefined };
+  const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
+
+  const directKeys = [
+    localStorage.getItem("userId"),
+    localStorage.getItem("UserID"),
+    localStorage.getItem("uid"),
+    sessionStorage.getItem("userId"),
+    sessionStorage.getItem("UserID"),
+    sessionStorage.getItem("uid"),
+  ].map(toInt).filter(Boolean);
+  if (directKeys.length) return { token, registrarId: directKeys[0] };
+
+  const objectKeys = ["user","profile","account","currentUser","session","auth","registrar"];
+  for (const src of [localStorage, sessionStorage]) {
+    for (const k of objectKeys) {
+      const obj = readJSON(src.getItem(k));
+      if (!obj) continue;
+      const candidates = [
+        obj?.UserID, obj?.userId, obj?.id, obj?.ID, obj?.uid,
+        obj?.user?.UserID, obj?.user?.userId, obj?.user?.id,
+        obj?.data?.user?.id, obj?.data?.user?.userId,
+      ].map(toInt).filter(Boolean);
+      if (candidates.length) return { token, registrarId: candidates[0] };
+    }
+  }
+
+  if (token) {
+    const p = decodeJwt(token) || {};
+    const jwtId = [p.userId, p.uid, p.id, p.sub].map(toInt).filter(Boolean)[0];
+    if (jwtId) return { token, registrarId: jwtId };
+  }
+
+  return { token, registrarId: undefined };
 }
 
+/* ---------- mapping ---------- */
 function mapRow(r) {
   return {
     id: r.NotificationID ?? r.id ?? r.notificationid,
@@ -28,64 +76,118 @@ function mapRow(r) {
     entity_id: r.EntityId ?? r.entity_id,
     data: r.Data ?? r.data ?? null,
     type: r.Type ?? r.type,
+    title: r.Title ?? r.title ?? null,
+
+    enrichedMeta: null,
   };
 }
 
-function buildMessage(n) {
-  try {
-    const d = n.data || {};
-    if ((n.type === "request" || n.entity === "CommitteeRequest") && (d.action === "registrar_response" || d.responseType || d.category)) {
-      const who = n.sender_name || "Registrar";
-      const student = d.studentName || (d.studentId ? `Student ${d.studentId}` : "student");
-      const status = (d.lineStatus || d.status || "updated").toString();
-      let verb = status;
-      if (status === "fulfilled") verb = "completed";
-      else if (status === "rejected") verb = "rejected";
-      else if (status === "failed") verb = "failed";
-      else if (status === "pending") verb = "updated (pending)";
-      const ir = String(d.category || d.responseType || "").toLowerCase().includes("irregular");
-      const parts = [];
-      const courses = d.PreviousLevelCourses || d.courses;
-      if (Array.isArray(courses) && courses.length) parts.push(`Courses: ${courses.join(", ")}`);
-      if (d.Level || d.level) parts.push(`Level: ${d.Level || d.level}`);
-      if (d.replace !== undefined || d.Replace !== undefined) parts.push((d.replace ?? d.Replace) ? "Replaced previous courses" : "Appended to existing courses");
-      return `${who} ${verb} ${ir ? "an irregular update for" : "a request for"} ${student}${parts.length ? ` (${parts.join("; ")})` : ""}`;
-    }
-    if ((n.type === "request" || n.entity === "CommitteeRequest") && (d.action === "request_status")) {
-      const who = n.sender_name || "Registrar";
-      const s = (d.status || "updated").toString();
-      const verb = s === "fulfilled" ? "completed" : s;
-      return `${who} ${verb} committee request #${n.entity_id ?? n.id ?? ""}`.trim();
-    }
-    if (n.type === "feedback") {
-      const who = n.sender_name || "Someone";
-      const where = n.entity_id ? ` on schedule ${n.entity_id}` : "";
-      return `${who} posted feedback${where}`;
-    }
-  } catch {}
-  return n.message || "Notification";
+/* ---------- message composers (تجميع الوصف فقط، بدون الطلاب) ---------- */
+function pickArr(v) {
+  if (Array.isArray(v)) return v;
+  if (v == null) return [];
+  if (typeof v === "string") return v.split(/[,|\n]/g).map(s => s.trim()).filter(Boolean);
+  return [];
 }
 
+// عنوان افتراضي ذكي حسب نوع/كيان الإشعار
+function defaultTitleFor(n) {
+  const ent = String(n?.entity || "").toLowerCase();
+  const typ = String(n?.type || "").toLowerCase();
+  if (ent.includes("committeerequest") || typ === "request") {
+    return "Scheduler committee data request";
+  }
+  return "New request";
+}
+
+function pickMeta(n) {
+  const d = n.data || {};
+  const m = n.enrichedMeta || {};
+  const resolvedTitle =
+    (d.title ?? n.title ?? m.title) || defaultTitleFor(n);
+
+  return {
+    title: resolvedTitle,
+    level: d.level ?? d.Level ?? m.level ?? null,
+    neededFields: pickArr(d.neededFields ?? d.NeededFields ?? m.neededFields),
+    description:  d.description ?? d.Description ?? m.description ?? null,
+    note: d.note ?? d.notes ?? m.note ?? null,
+  };
+}
+
+function composeShortLine(n){
+  const meta = pickMeta(n);
+  return `${meta.title}${meta.level ? ` (Level ${meta.level})` : ""}`;
+}
+
+function composeFullMessage(n){
+  const meta = pickMeta(n);
+  const lines = [];
+  lines.push(`${meta.title}${meta.level ? ` (Level ${meta.level})` : ""}`);
+  if (meta.neededFields.length) lines.push(`Required fields: ${meta.neededFields.join(", ")}`);
+  if (meta.description)         lines.push(String(meta.description));
+  if (meta.note)                lines.push(String(meta.note));
+  return lines.join("\n");
+}
+
+/* ---------- component ---------- */
 export default function RegistrarNotifications() {
-  const { token, registrarId } = getAuth();
+  const baseAuth = getAuth();
+  const [registrarId, setRegistrarId] = useState(baseAuth.registrarId);
+  const token = baseAuth.token;
+
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(() => new Set());
+  const [err, setErr] = useState("");
+  const [onlyUnread, setOnlyUnread] = useState(false);
+
+  const [selected, setSelected] = useState(null);
+
   const auth = useMemo(() => (token ? { headers: { Authorization: `Bearer ${token}` } } : {}), [token]);
 
+  const tryWhoAmI = useCallback(async () => {
+    if (registrarId || !token) return;
+    const candidates = ["/auth/me", "/Users/me", "/me"];
+    for (const path of candidates) {
+      try {
+        const res = await axios.get(`${API_BASE}${path}`, auth);
+        const id = toInt(res.data?.UserID ?? res.data?.userId ?? res.data?.id ?? res.data?.data?.user?.id);
+        if (id) { setRegistrarId(id); return; }
+      } catch {}
+    }
+  }, [registrarId, token]);
+
   const load = useCallback(async () => {
-    if (!registrarId) { setLoading(false); return; }
+    if (!registrarId) { 
+      setLoading(false); 
+      setErr("Missing registrarId in storage.");
+      tryWhoAmI();
+      return; 
+    }
     try {
-      const url = `${API_BASE}/Notifications/view?receiverId=${registrarId}&limit=30`;
+      setLoading(true);
+      setErr("");
+      const url = `${API_BASE}/Notifications/view?receiverId=${registrarId}&limit=30${onlyUnread ? "&isRead=false" : ""}`;
       const res = await axios.get(url, auth);
-      if (res.data?.success) setList((res.data.notifications || []).map(mapRow));
-      else setList([]);
+      if (res.data?.success) {
+        setList((res.data.notifications || []).map(mapRow));
+      } else {
+        setList([]);
+        setErr(`Bad API shape: ${JSON.stringify(res.data)}`);
+      }
     } catch (e) {
+      const detail = e.response
+        ? `HTTP ${e.response.status} ${e.response.statusText} | ${e.config?.method?.toUpperCase()} ${e.config?.url}\n${JSON.stringify(e.response.data)}`
+        : e.request
+          ? `Network error (no response) | ${e.config?.method?.toUpperCase()} ${e.config?.url}`
+          : e.message;
       console.error("registrar notifications load failed:", e);
+      setErr(detail);
+      setList([]);
     } finally {
       setLoading(false);
     }
-  }, [registrarId, token]);
+  }, [registrarId, token, onlyUnread]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -95,66 +197,197 @@ export default function RegistrarNotifications() {
       setList((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     } catch (e) {
       console.error("mark read failed:", e);
+      setErr("Failed to mark as read.");
     }
   };
 
-  const toggleExpand = (id) => {
-    setExpanded((prev) => { const n = new Set(prev); n.has(id) ? n.delete(id) : n.add(id); return n; });
+  const markAllRead = async () => {
+    try {
+      if (!registrarId) return;
+      await axios.post(`${API_BASE}/Notifications/mark-all-read`, { receiverId: registrarId }, auth);
+      setList(prev => prev.map(n => ({ ...n, is_read: true })));
+    } catch (e) {
+      console.error("mark all read failed:", e);
+      setErr("Failed to mark all read.");
+    }
   };
 
-  if (loading) return <div className="m-4">Loading notifications...</div>;
-  if (list.length === 0) return <div className="m-4">No notifications.</div>;
+  // إثراء بدون students
+  const enrichIfNeeded = useCallback(async (n) => {
+    const hasNeeded =
+      (n.data && (n.data.neededFields || n.data.NeededFields || n.data.level || n.data.title || n.data.description)) ||
+      (n.enrichedMeta && (n.enrichedMeta.neededFields || n.enrichedMeta.level || n.enrichedMeta.title || n.enrichedMeta.description));
+
+    const isCR = n.entity === "CommitteeRequest" || n.entity === "CommitteeRequests";
+
+    if (hasNeeded || !isCR || !n.entity_id) return n;
+
+    try {
+      const res = await axios.get(`${API_BASE}/registrarRequests/requests/${n.entity_id}`, auth);
+      const head = res.data || {};
+      const enriched = {
+        ...n,
+        enrichedMeta: {
+          title: head.title ?? null,
+          level: head.level ?? null,
+          neededFields: Array.isArray(head.neededFields)
+            ? head.neededFields
+            : (typeof head.neededFields === "string"
+                ? head.neededFields.split(/[,|\n]/g).map(s=>s.trim()).filter(Boolean)
+                : []),
+          description: head.description ?? null,
+        }
+      };
+      return enriched;
+    } catch (e) {
+      console.warn("enrichIfNeeded failed:", e?.message);
+      return n;
+    }
+  }, [auth]);
+
+  const openModal = async (n) => {
+    if (!n.is_read) await markRead(n.id);
+    const enriched = await enrichIfNeeded(n);
+    setSelected(enriched);
+  };
+  const closeModal = () => setSelected(null);
+
+  const unreadCount = list.filter((n) => !n.is_read).length;
+  const visible = list.filter(n => onlyUnread ? !n.is_read : true);
+  const fmt = (d) => (d ? new Date(d).toLocaleString() : "");
 
   return (
-    <div className="container mt-4" style={{ maxWidth: 640 }}>
+    <div className="container mt-4" style={{ maxWidth: 760 }}>
       <div className="card shadow-sm">
         <div className="card-header d-flex justify-content-between align-items-center">
-          <span>Notifications</span>
-          <span className="badge bg-danger">{list.filter((n) => !n.is_read).length}</span>
+          <div className="d-flex align-items-center gap-2">
+            <span className="fw-semibold">Notifications</span>
+            <div className="form-check form-switch m-0">
+              <input className="form-check-input" type="checkbox" id="onlyUnread" checked={onlyUnread} onChange={e => setOnlyUnread(e.target.checked)} />
+              <label className="form-check-label small" htmlFor="onlyUnread">Unread</label>
+            </div>
+          </div>
+          <div className="d-flex align-items-center gap-2">
+            <span className="badge bg-secondary">Unread: {unreadCount}</span>
+            <button className="btn btn-outline-secondary btn-sm" onClick={load}>⟳ Refresh</button>
+            <button className="btn btn-outline-primary btn-sm" onClick={markAllRead} disabled={unreadCount === 0}>✓ Mark all read</button>
+          </div>
         </div>
+
         <ul className="list-group list-group-flush">
-          {list.map((n) => (
+          {loading && <li className="list-group-item text-muted">Loading…</li>}
+          {!!err && !loading && (
+            <li className="list-group-item">
+              <div className="alert alert-danger mb-0" style={{ whiteSpace: "pre-wrap" }}>{err}</div>
+            </li>
+          )}
+          {!loading && !err && visible.length === 0 && (
+            <li className="list-group-item text-muted">No notifications.</li>
+          )}
+          {!loading && !err && visible.map((n) => (
             <li
               key={n.id}
               className={`list-group-item d-flex justify-content-between align-items-start ${!n.is_read ? "bg-light" : ""}`}
-              onClick={() => { if (!n.is_read) markRead(n.id); toggleExpand(n.id); }}
+              onClick={() => openModal(n)}
               style={{ cursor: "pointer" }}
             >
               <div style={{ flex: 1 }}>
-                <div className="fw-semibold">{buildMessage(n)}</div>
+                <div className="fw-semibold">{composeShortLine(n)}</div>
                 <small className="text-muted">
-                  {n.created_at ? new Date(n.created_at).toLocaleString() : ""}
-                  {n.entity ? ` • ${n.entity}#${n.entity_id ?? ""}` : ""}
+                  {fmt(n.created_at)}
+                  {n.entity ? ` • ${n.entity}` : ""}
                 </small>
-                {expanded.has(n.id) && (
-                  <div className="mt-2">
-                    {(n.sender_name || n.sender_email || n.sender_role) && (
-                      <div>
-                        <span className="fw-semibold">From:</span> {n.sender_name || "Unknown"}
-                        {n.sender_role ? ` (${n.sender_role})` : ""}
-                        {n.sender_email ? ` — ${n.sender_email}` : ""}
-                      </div>
-                    )}
-                    {(n.receiver_name || n.receiver_email || n.receiver_role) && (
-                      <div>
-                        <span className="fw-semibold">To:</span> {n.receiver_name || "Unknown"}
-                        {n.receiver_role ? ` (${n.receiver_role})` : ""}
-                        {n.receiver_email ? ` — ${n.receiver_email}` : ""}
-                      </div>
-                    )}
-                    {n.data && Object.keys(n.data || {}).length ? (
-                      <pre className="mt-2 bg-body-secondary p-2 rounded" style={{ whiteSpace: "pre-wrap" }}>
-                        {JSON.stringify(n.data, null, 2)}
-                      </pre>
-                    ) : null}
-                  </div>
-                )}
               </div>
-              {!n.is_read && <span className="badge bg-primary rounded-pill">new</span>}
+              {!n.is_read && <span className="badge bg-primary rounded-pill">New</span>}
             </li>
           ))}
         </ul>
       </div>
+
+      {/* ===== Modal ===== */}
+      {selected && (
+        <div
+          className="modal fade show"
+          style={{ display: "block", background: "rgba(0,0,0,.5)" }}
+          tabIndex={-1}
+          role="dialog"
+          aria-modal="true"
+          onClick={closeModal}
+          onKeyDown={(e) => { if (e.key === "Escape") closeModal(); }}
+        >
+          <div className="modal-dialog modal-lg modal-dialog-centered" onClick={(e)=>e.stopPropagation()}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <div>
+                  <div className="fw-bold">{selected.receiver_name || "Receiver"}</div>
+                  <small className="text-muted">{fmt(selected.created_at)}</small>
+                </div>
+                <div className="d-flex align-items-center gap-2">
+                  {!selected.is_read && <span className="badge bg-primary">New</span>}
+                  <button type="button" className="btn-close" aria-label="Close" onClick={closeModal}></button>
+                </div>
+              </div>
+
+              <div className="modal-body">
+                {/* Needed Fields chips */}
+                {(() => {
+                  const meta = pickMeta(selected);
+                  return meta.neededFields.length ? (
+                    <div className="mb-3 d-flex flex-wrap gap-2">
+                      {meta.neededFields.map((f, i) => (
+                        <span key={i} className="badge rounded-pill bg-secondary-subtle text-dark border">
+                          {f}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null;
+                })()}
+
+                {/* الرسالة المجمعة (تشمل description) */}
+                <div className="mb-0" style={{ whiteSpace: "pre-wrap" }}>
+                  {composeFullMessage(selected)}
+                </div>
+
+                {/* From/To فقط إذا اختلفوا */}
+                {selected.created_by !== selected.receiver_id ? (
+                  <div className="row g-3 mt-3">
+                    <div className="col-md-6">
+                      <div className="card border-0 bg-light">
+                        <div className="card-body py-2">
+                          <div className="text-uppercase text-muted small">FROM (ID)</div>
+                          <div className="fw-semibold">{selected.created_by ?? "—"}</div>
+                          {(selected.sender_name || selected.sender_email || selected.sender_role) && (
+                            <div className="small text-muted">
+                              {selected.sender_name || "Unknown"}
+                              {selected.sender_email ? ` — ${selected.sender_email}` : ""}
+                              {selected.sender_role ? ` (${selected.sender_role})` : ""}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="col-md-6">
+                      <div className="card border-0 bg-light">
+                        <div className="card-body py-2">
+                          <div className="text-uppercase text-muted small">TO (ID)</div>
+                          <div className="fw-semibold">{selected.receiver_id ?? "—"}</div>
+                          {(selected.receiver_name || selected.receiver_email || selected.receiver_role) && (
+                            <div className="small text-muted">
+                              {selected.receiver_name || "Unknown"}
+                              {selected.receiver_email ? ` — ${selected.receiver_email}` : ""}
+                              {selected.receiver_role ? ` (${selected.receiver_role})` : ""}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

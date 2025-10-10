@@ -1,3 +1,4 @@
+// server/src/controllers/NotificationsController.js
 import pool from "../../DataBase_config/DB_config.js";
 
 /* helpers */
@@ -24,61 +25,114 @@ async function detectUsersTable(client) {
   return null;
 }
 
-/* GET /Notifications/view */
 export async function viewNotifications(req, res) {
   const receiverId = toInt(req.query.receiverId);
-  const isRead = toBoolStr(req.query.isRead);
-  const entity = safeText(req.query.entity || "", 100) || null;
-  const type = safeText(req.query.type || "", 60) || null;
-  const search = safeText(req.query.q || "", 200) || null;
+  const isRead     = toBoolStr(req.query.isRead);
+  const entity     = safeText(req.query.entity || "", 100) || null;
+  const type       = safeText(req.query.type   || "", 60)  || null;
+  const search     = safeText(req.query.q      || "", 200) || null;
 
-  const page = Math.max(1, toInt(req.query.page) || 1);
-  const limit = Math.min(100, Math.max(1, toInt(req.query.limit) || 20));
+  const page   = Math.max(1, toInt(req.query.page)  || 1);
+  const limit  = Math.min(100, Math.max(1, toInt(req.query.limit) || 20));
   const offset = (page - 1) * limit;
 
-  const since = req.query.since ? new Date(req.query.since) : null;
-  const until = req.query.until ? new Date(req.query.until) : null;
+  const since  = req.query.since ? new Date(req.query.since) : null;
+  const until  = req.query.until ? new Date(req.query.until) : null;
 
   const where = [];
-  const vals = [];
+  const vals  = [];
 
   if (receiverId) { vals.push(receiverId); where.push(`n."ReceiverID" = $${vals.length}`); }
-  if (isRead === "true")  where.push(`coalesce(n."IsRead",false) = true`);
-  if (isRead === "false") where.push(`coalesce(n."IsRead",false) = false`);
+  if (isRead === "true")  where.push(`coalesce(n."IsRead", false) = true`);
+  if (isRead === "false") where.push(`coalesce(n."IsRead", false) = false`);
   if (entity) { vals.push(entity); where.push(`n."Entity" = $${vals.length}`); }
-  if (type)   { vals.push(type);   where.push(`n."Type" = $${vals.length}`); }
-  if (search) { vals.push(`%${search}%`); where.push(`n."Message" ILIKE $${vals.length}`); }
+  if (type)   { vals.push(type);   where.push(`n."Type"   = $${vals.length}`); }
+  if (search) { 
+    vals.push(`%${search}%`); 
+    vals.push(`%${search}%`);
+    where.push(`(n."Message" ILIKE $${vals.length-1} OR coalesce(n."Title",'') ILIKE $${vals.length})`); 
+  }
   if (since)  { vals.push(since); where.push(`n."CreatedAt" >= $${vals.length}`); }
   if (until)  { vals.push(until); where.push(`n."CreatedAt" <= $${vals.length}`); }
+
+  const baseOrder = `order by n."CreatedAt" desc nulls last, n."NotificationID" desc`;
+
+  // الاستعلام بدون JOIN (ضامن)
+  const selectPlain = `
+    select 
+      n."NotificationID",
+      n."Message",
+      n."Title",
+      n."Type",
+      n."Entity",
+      n."EntityId",
+      n."UserID",
+      n."ReceiverID",
+      n."CreatedBy",
+      n."CreatedAt",
+      n."IsRead",
+      n."ReadAt",
+      n."Data"
+    from "Notifications" n
+    ${where.length ? "where " + where.join(" and ") : ""}
+    ${baseOrder}
+    limit ${limit} offset ${offset}
+  `;
 
   try {
     const client = await pool.connect();
     try {
+      // جرّب نستكشف جدول المستخدمين
       const usersTable = await detectUsersTable(client);
-      const sql = usersTable
-        ? `
-          select n.*,
-                 coalesce(su."Full_name", trim(coalesce(su."First_name",'') || ' ' || coalesce(su."Last_name",''))) as "SenderName",
-                 su."Email" as "SenderEmail",
-                 su."Role"  as "SenderRole",
-                 coalesce(ru."Full_name", trim(coalesce(ru."First_name",'') || ' ' || coalesce(ru."Last_name",''))) as "ReceiverName",
-                 ru."Email" as "ReceiverEmail",
-                 ru."Role"  as "ReceiverRole"
-            from "Notifications" n
-            left join ${usersTable} su on su."UserID" = n."CreatedBy"
-            left join ${usersTable} ru on ru."UserID" = n."ReceiverID"
-           ${where.length ? "where " + where.join(" and ") : ""}
-           order by n."CreatedAt" desc nulls last
-           limit ${limit} offset ${offset}
-        `
-        : `
-          select * from "Notifications" n
-           ${where.length ? "where " + where.join(" and ") : ""}
-           order by n."CreatedAt" desc nulls last
-           limit ${limit} offset ${offset}
-        `;
-      const { rows } = await client.query(sql, vals);
-      res.json({ success: true, notifications: rows });
+
+      if (!usersTable) {
+        // ما فيه جدول Users → استخدم الاستعلام البسيط
+        const { rows } = await client.query(selectPlain, vals);
+        return res.json({ success: true, notifications: rows });
+      }
+
+      // الاستعلام مع JOIN
+      const selectWithUsers = `
+        select 
+          n."NotificationID",
+          n."Message",
+          n."Title",
+          n."Type",
+          n."Entity",
+          n."EntityId",
+          n."UserID",
+          n."ReceiverID",
+          n."CreatedBy",
+          n."CreatedAt",
+          n."IsRead",
+          n."ReadAt",
+          n."Data",
+          /* sender */
+          coalesce(su."Full_name", trim(coalesce(su."First_name",'') || ' ' || coalesce(su."Last_name",''))) as "SenderName",
+          su."Email" as "SenderEmail",
+          su."Role"  as "SenderRole",
+          /* receiver (يطابق ReceiverID أو UserID) */
+          coalesce(ru."Full_name", trim(coalesce(ru."First_name",'') || ' ' || coalesce(ru."Last_name",''))) as "ReceiverName",
+          ru."Email" as "ReceiverEmail",
+          ru."Role"  as "ReceiverRole"
+        from "Notifications" n
+        left join ${usersTable} su on su."UserID" = n."CreatedBy"
+        left join ${usersTable} ru on (ru."UserID" = n."ReceiverID" or ru."UserID" = n."UserID")
+        ${where.length ? "where " + where.join(" and ") : ""}
+        ${baseOrder}
+        limit ${limit} offset ${offset}
+      `;
+
+      try {
+        // أولًا: نحاول بالـ JOIN
+        const { rows } = await client.query(selectWithUsers, vals);
+        return res.json({ success: true, notifications: rows });
+      } catch (joinErr) {
+        // fallback تلقائي بدون JOIN + لوج واضح في السيرفر
+        console.warn("[notifications] join failed → falling back to plain select:", joinErr?.message);
+        const { rows } = await client.query(selectPlain, vals);
+        return res.json({ success: true, notifications: rows, _fallback: true });
+      }
     } finally {
       client.release();
     }
@@ -87,6 +141,7 @@ export async function viewNotifications(req, res) {
     res.status(500).json({ success: false, message: "Failed to load notifications" });
   }
 }
+
 
 /* GET /Notifications/counts?receiverId= */
 export async function getCounts(req, res) {
@@ -140,7 +195,7 @@ export async function markAllRead(req, res) {
   const vals  = [receiverId];
 
   if (entity) { vals.push(entity); where.push(`"Entity" = $${vals.length}`); }
-  if (type)   { vals.push(type);   where.push(`"Type" = $${vals.length}`); }
+  if (type)   { vals.push(type);   where.push(`"Type"   = $${vals.length}`); }
 
   try {
     const sql = `update "Notifications" set "IsRead" = true, "ReadAt" = now() where ${where.join(" and ")}`;
@@ -167,12 +222,13 @@ export async function createNotification(req, res) {
       return res.status(400).json({ success: false, message: "message & receiverId are required" });
     }
 
+    // cast Data to jsonb when possible
     const { rows } = await pool.query(
       `insert into "Notifications"
         ("Message","CreatedAt","CreatedBy","UserID","ReceiverID","Type","Entity","EntityId","Data")
-       values ($1, now(), $2, $3, $4, $5, $6, $7, $8)
+       values ($1, now(), $2, $3, $4, $5, $6, $7, $8::jsonb)
        returning *`,
-      [message, createdBy, receiverId, receiverId, type, entity, entityId, data]
+      [message, createdBy, receiverId, receiverId, type, entity, entityId, JSON.stringify(data)]
     );
     res.json({ success: true, notification: rows[0] });
   } catch (err) {

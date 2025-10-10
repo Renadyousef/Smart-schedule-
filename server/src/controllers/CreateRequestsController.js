@@ -54,6 +54,67 @@ function handle500(res, label, err){
   });
 }
 
+/* ---------- notifications helper (safe/flexible) ---------- */
+async function insertNotification(client, {
+  message,
+  type = "request",
+  entity = "CommitteeRequest",
+  entityId,
+  receiverId = null,
+  receiverRole = null,
+  createdBy = null,
+  data = null,
+}) {
+  const hasTable = await tableExists(client, 'Notifications');
+  if (!hasTable) return; // silently skip if no table
+
+  const hasMessage     = await columnExists(client, 'Notifications', 'Message').catch(()=>false);
+  const hasIsRead      = await columnExists(client, 'Notifications', 'IsRead').catch(()=>false);
+  const hasCreatedAt   = await columnExists(client, 'Notifications', 'CreatedAt').catch(()=>false);
+  const hasSenderName  = await columnExists(client, 'Notifications', 'SenderName').catch(()=>false);
+  const hasSenderEmail = await columnExists(client, 'Notifications', 'SenderEmail').catch(()=>false);
+  const hasSenderRole  = await columnExists(client, 'Notifications', 'SenderRole').catch(()=>false);
+  const hasReceiverID  = await columnExists(client, 'Notifications', 'ReceiverID').catch(()=>false);
+  const hasReceiverRole= await columnExists(client, 'Notifications', 'ReceiverRole').catch(()=>false);
+  const hasEntity      = await columnExists(client, 'Notifications', 'Entity').catch(()=>false);
+  const hasEntityId    = await columnExists(client, 'Notifications', 'EntityId').catch(()=>false);
+  const hasType        = await columnExists(client, 'Notifications', 'Type').catch(()=>false);
+  const hasCreatedBy   = await columnExists(client, 'Notifications', 'CreatedBy').catch(()=>false);
+  const hasData        = await columnExists(client, 'Notifications', 'Data').catch(()=>false);
+
+  const dataType = hasData ? await columnDataType(client, 'Notifications', 'Data').catch(()=>null) : null;
+
+  const cols = [];
+  const vals = [];
+  const pars = [];
+
+  // minimal safe fields
+  if (hasMessage){ cols.push('"Message"');     pars.push(message || 'Notification'); vals.push(`$${pars.length}`); }
+  if (hasIsRead){  cols.push('"IsRead"');      vals.push('false'); }
+  if (hasCreatedAt){ cols.push('"CreatedAt"'); vals.push('now()'); }
+  if (hasType){    cols.push('"Type"');        pars.push(type);     vals.push(`$${pars.length}`); }
+  if (hasEntity){  cols.push('"Entity"');      pars.push(entity);   vals.push(`$${pars.length}`); }
+  if (hasEntityId){cols.push('"EntityId"');    pars.push(entityId); vals.push(`$${pars.length}`); }
+
+  if (hasReceiverID && receiverId != null){ cols.push('"ReceiverID"'); pars.push(receiverId); vals.push(`$${pars.length}`); }
+  if (hasReceiverRole && receiverRole){ cols.push('"ReceiverRole"'); pars.push(receiverRole); vals.push(`$${pars.length}`); }
+
+  if (hasCreatedBy && createdBy != null){ cols.push('"CreatedBy"'); pars.push(createdBy); vals.push(`$${pars.length}`); }
+
+  if (hasData && data != null){
+    if (dataType && dataType.toLowerCase().includes('json')) {
+      cols.push('"Data"'); pars.push(JSON.stringify(data)); vals.push(`$${pars.length}::jsonb`);
+    } else {
+      cols.push('"Data"'); pars.push(JSON.stringify(data)); vals.push(`$${pars.length}`);
+    }
+  }
+
+  if (cols.length === 0) return; // nothing to insert safely
+
+  const sql = `INSERT INTO public."Notifications" (${cols.join(",")}) VALUES (${vals.join(",")})`;
+  await client.query(sql, pars);
+}
+
 /* ============================== CREATE ============================== */
 export const createRequest = async (req, res) => {
   const client = await pool.connect();
@@ -131,6 +192,51 @@ export const createRequest = async (req, res) => {
       for (const name of cleanNames){
         await client.query(insLine, [requestId, null, name, "unmatched", "pending", null, null]);
       }
+    }
+
+    /* -------- create notifications (scheduler will retrieve) -------- */
+    const prettyNeeded = cleanNeeded.join(", ");
+    const msg = `${title} — new data request${cleanLevel?` (level ${cleanLevel})`:''} (${cleanNames.length} students)`;
+    const dataPayload = {
+      action: "new_request",
+      requestId,
+      requestType: "DataRequest",
+      level: cleanLevel,
+      neededFields: cleanNeeded,
+      studentCount: cleanNames.length,
+      studentNamesPreview: cleanNames.slice(0,5), // short preview
+      createdBy,
+      committeeId,
+      registrarId,
+      status: "pending",
+    };
+
+    // notify registrar if provided
+    if (registrarId != null){
+      await insertNotification(client, {
+        message: msg,
+        type: "request",
+        entity: "CommitteeRequest",
+        entityId: requestId,
+        receiverId: registrarId,
+        receiverRole: "registrar",
+        createdBy,
+        data: dataPayload,
+      });
+    }
+
+    // notify committee if provided
+    if (committeeId != null){
+      await insertNotification(client, {
+        message: msg,
+        type: "request",
+        entity: "CommitteeRequest",
+        entityId: requestId,
+        receiverId: committeeId,
+        receiverRole: "committee",
+        createdBy,
+        data: dataPayload,
+      });
     }
 
     await client.query("COMMIT");
