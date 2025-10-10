@@ -77,12 +77,27 @@ function rowsToSchedule(rows) {
 
     const label = TIMES[startIdx];
     out[day] ||= {};
-    out[day][label] = { subject, room, type, duration };
+    out[day][label] = {
+      subject,
+      room,
+      type,
+      duration,
+      meta: {
+        scheduleId: r.ScheduleID ?? null,
+        level: r.Level ?? null,
+        status: r.Status ?? null,
+        sectionId: r.SectionID ?? null,
+        courseCode: r.course_code ?? null,
+        courseName: r.course_name ?? null,
+        day,
+        startHM,
+        endHM,
+      },
+    };
   }
   return out;
 }
 
-// لتجميع صفوف (All Levels) حسب ScheduleID ومعرفة level إن وجد
 function groupRowsBySchedule(rows) {
   const grouped = {};
   for (const row of rows || []) {
@@ -104,7 +119,6 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
   const [scheduleIdCurrent, setScheduleIdCurrent] = useState(null);
   const [levelCurrent, setLevelCurrent] = useState(null);
 
-  // All Levels: مجموعة الجداول + مؤشر الحالي
   const [allSchedules, setAllSchedules] = useState([]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
@@ -115,6 +129,8 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
   const [submitting, setSubmitting] = useState(false);
   const [flash, setFlash] = useState({ type: "", msg: "" });
   const [viewMode, setViewMode] = useState("your"); // "your" | "all"
+
+  const [selectedTarget, setSelectedTarget] = useState(null); // { sectionId, subject, day, startHM, endHM } | null
 
   useEffect(() => {
     async function run() {
@@ -131,11 +147,10 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
 
         const token = localStorage.getItem("token");
 
-        // helper: fetch level schedule
         const fetchLevel = async (level) => {
           const url = new URL("/api/sections/courses-by-level", apiBase);
           url.searchParams.set("level", String(level));
-          url.searchParams.set("status", "draft");
+          url.searchParams.set("status", "any");
           url.searchParams.set("includeSlots", "1");
           const res = await fetch(url.toString(), {
             headers: {
@@ -150,14 +165,10 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
 
         if (viewMode === "your") {
           const payload = await fetchLevel(myLevel);
-
           const inferredScheduleId =
             payload?.scheduleId ??
             payload?.ScheduleID ??
-            payload?.schedule_id ??
             payload?.rows?.[0]?.ScheduleID ??
-            payload?.rows?.[0]?.schedule_id ??
-            payload?.rows?.[0]?.scheduleId ??
             null;
 
           setScheduleIdCurrent(inferredScheduleId);
@@ -166,7 +177,6 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
           setCurrentIndex(0);
           setScheduleGrid(rowsToSchedule(payload.rows));
         } else {
-          // All Levels: fetch لكل مستوى 1..8
           const levels = [1,2,3,4,5,6,7,8];
           const results = await Promise.allSettled(levels.map((lv) => fetchLevel(lv)));
 
@@ -214,7 +224,6 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
     run();
   }, [apiBase, viewMode]);
 
-  // تبديل جدول معيّن من allSchedules
   function showScheduleAt(idx) {
     if (idx < 0 || idx >= allSchedules.length) return;
     const it = allSchedules[idx];
@@ -237,6 +246,21 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
 
   const skip = useMemo(() => ({}), [scheduleGrid]);
 
+  // فتح المودال عند الضغط على خلية (ونص افتتاحي اختياري)
+  function onCellClick(slot) {
+    if (!slot) return;
+    setSelectedTarget({
+      sectionId: slot.meta?.sectionId ?? null,
+      subject: slot.subject,
+      day: slot.meta?.day,
+      startHM: slot.meta?.startHM,
+      endHM: slot.meta?.endHM,
+    });
+    const prefix = `[${slot.meta?.day} ${slot.meta?.startHM}-${slot.meta?.endHM}] ${slot.subject}: `;
+    setComment((prev) => (prev?.trim() ? prev : prefix));
+    setShowModal(true);
+  }
+
   async function submitFeedback() {
     setSubmitting(true);
     setFlash({ type: "", msg: "" });
@@ -245,23 +269,29 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
       const userRaw = localStorage.getItem("user");
       const user = userRaw ? JSON.parse(userRaw) : {};
       const userId = user?.id ?? user?._id ?? user?.UserID ?? user?.StudentID ?? null;
-      const role = user?.role || user?.Role || user?.userRole || (user?.isAdmin ? "admin" : "student");
+      const role =
+        user?.role || user?.Role || user?.userRole || (user?.isAdmin ? "admin" : "student");
 
       if (!token) throw new Error("Missing auth token");
       if (!userId) throw new Error("Missing user id");
       if (!scheduleIdCurrent) throw new Error("Missing schedule id");
       if (!comment.trim()) throw new Error("Write your feedback first");
 
+      const body = {
+        comment: comment.trim(),
+        scheduleId: scheduleIdCurrent,
+        courseId: null,
+        role,
+        userId,
+      };
+
       const res = await fetch(`${apiBase}/api/feedback`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify({
-          comment: comment.trim(),
-          scheduleId: scheduleIdCurrent,
-          courseId: null,
-          role,
-          userId,
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
       });
 
       const data = await res.json().catch(() => ({}));
@@ -270,6 +300,7 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
       setFlash({ type: "success", msg: "Feedback submitted successfully." });
       setShowModal(false);
       setComment("");
+      setSelectedTarget(null);
     } catch (e) {
       setFlash({ type: "danger", msg: e.message || "Failed to submit feedback." });
     } finally {
@@ -292,6 +323,9 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; }
         th,td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden; }
         .subject-box { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; font-size:.9rem; }
+        .subject-box.clickable { cursor:pointer; transition: transform .06s ease; }
+        .subject-box.clickable:active { transform: scale(.98); outline: 2px solid rgba(11,58,103,.2); }
+
         .room { font-size:.75rem; color:#333; }
 
         .legend-box { display:inline-flex; align-items:center; gap:8px; margin:0 10px; font-size:.9rem; font-weight:600; color:#333; }
@@ -327,13 +361,11 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         </div>
       </div>
 
-      {/* العنوان */}
       <h2 className="text-center mb-1">Preliminary Schedule</h2>
       <p className="text-center text-muted mb-3">
-        This is a preliminary schedule. Please provide your feedback if you have any notes.
+        Click any course cell to leave feedback about it, or use the button below for general notes.
       </p>
 
-      {/* في All Levels: نعرض المستوى فقط بدون Schedule ID */}
       {viewMode === "all" && levelCurrent != null && (
         <div className="text-center mb-2">
           <h5 className="mb-0">Level {String(levelCurrent)}</h5>
@@ -344,7 +376,6 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
       {loading && <div className="alert alert-info text-center">Loading…</div>}
       {err && !loading && <div className="alert alert-danger text-center">{err}</div>}
 
-      {/* الجدول */}
       <table className="table-fixed">
         <thead>
           <tr>
@@ -377,7 +408,12 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
 
                 return (
                   <td key={day} rowSpan={rowSpan}>
-                    <div className="subject-box" style={{ backgroundColor: bg }}>
+                    <div
+                      className="subject-box clickable"
+                      style={{ backgroundColor: bg }}
+                      onClick={() => onCellClick(slot)}
+                      title="Click to give feedback on this course"
+                    >
                       {slot.subject}
                       <div className="room">Room {slot.room}</div>
                     </div>
@@ -396,12 +432,12 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div><span>Lab</span></div>
       </div>
 
-      {/* زر الفيدباك — مخفي في All Levels */}
+      {/* زر فيدباك عام */}
       {viewMode === "your" && (
         <div className="text-center mt-3">
           <button
             className="btn btn-feedback"
-            onClick={() => setShowModal(true)}
+            onClick={() => { setSelectedTarget(null); setComment(""); setShowModal(true); }}
             disabled={!scheduleIdCurrent}
             title={!scheduleIdCurrent ? "Schedule ID is missing" : "Give feedback"}
           >
@@ -410,7 +446,7 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         </div>
       )}
 
-      {/* أزرار Previous/Next — أسفل الصفحة في All Levels فقط */}
+      {/* Previous/Next */}
       {viewMode === "all" && allSchedules.length > 0 && (
         <div className="d-flex justify-content-center pager mt-4">
           <button className="btn btn-outline-secondary" onClick={goPrev} disabled={allSchedules.length <= 1}>Previous</button>
@@ -421,24 +457,53 @@ export default function FixedSchedule({ apiBase = "http://localhost:5000" }) {
         </div>
       )}
 
-      {/* مودال الفيدباك */}
+      {/* Modal (نفس الديزاين) */}
       {showModal && (
         <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content" style={{ borderRadius: "20px" }}>
               <div className="modal-header" style={{ background: "#e9f2ff", color: "#0b3a67", borderTopLeftRadius: "20px", borderTopRightRadius: "20px" }}>
-                <h5 className="modal-title">Feedback</h5>
+                <h5 className="modal-title">
+                  Feedback{selectedTarget?.subject ? ` — ${selectedTarget.subject}` : ""}
+                </h5>
                 <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
               </div>
               <div className="modal-body">
-                <textarea className="form-control" rows={4} placeholder="Your feedback…" value={comment} onChange={(e) => setComment(e.target.value)} />
+                {selectedTarget && (
+                  <div className="mb-2 small text-muted">
+                    {selectedTarget.day} | {selectedTarget.startHM}–{selectedTarget.endHM}
+                    {selectedTarget.sectionId ? ` | Section #${selectedTarget.sectionId}` : ""}
+                  </div>
+                )}
+                <textarea
+                  className="form-control"
+                  rows={4}
+                  placeholder="Your feedback…"
+                  value={comment}
+                  onChange={(e) => setComment(e.target.value)}
+                />
                 {!scheduleIdCurrent && <div className="text-danger small mt-2">Schedule ID is missing — please reload.</div>}
               </div>
               <div className="modal-footer d-flex gap-2">
-                <button className="btn btn-outline-secondary" style={{ borderRadius: "12px", padding: "8px 18px", fontWeight: "600" }} onClick={() => setShowModal(false)} disabled={submitting}>Cancel</button>
+                <button
+                  className="btn btn-outline-secondary"
+                  style={{ borderRadius: "12px", padding: "8px 18px", fontWeight: "600" }}
+                  onClick={() => setShowModal(false)}
+                  disabled={submitting}
+                >
+                  Cancel
+                </button>
                 <button
                   className="btn"
-                  style={{ backgroundColor: "#e9f2ff", color: "#0b3a67", borderRadius: "12px", padding: "8px 18px", fontWeight: "600", border: "none", opacity: submitting || !comment.trim() || !scheduleIdCurrent ? 0.7 : 1 }}
+                  style={{
+                    backgroundColor: "#e9f2ff",
+                    color: "#0b3a67",
+                    borderRadius: "12px",
+                    padding: "8px 18px",
+                    fontWeight: "600",
+                    border: "none",
+                    opacity: submitting || !comment.trim() || !scheduleIdCurrent ? 0.7 : 1,
+                  }}
                   onClick={submitFeedback}
                   disabled={submitting || !comment.trim() || !scheduleIdCurrent}
                 >

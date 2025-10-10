@@ -60,7 +60,7 @@ export default function Header({
             <LinkEl to="/">Home</LinkEl>
          <LinkEl to="/schedule">Schedule</LinkEl>
 
-            <LinkEl to="/personalized">Personalized Schedule</LinkEl>
+
            <LinkEl to="/electives">Electives</LinkEl>
           </div>
 
