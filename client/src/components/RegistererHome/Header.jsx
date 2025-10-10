@@ -1,8 +1,11 @@
 // RegistrarHeader.jsx
 import { NavLink, useNavigate } from "react-router-dom";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 function initialsFrom(nameLike, fallback = "RG") {
   const s = String(nameLike || "").trim();
@@ -17,9 +20,21 @@ export default function RegistrarHeader({
   onSignOut,
   redirectAfter = "/signup",
 }) {
-  const navigate = useNavigate(); // نتركه كما هو حتى لو ما استخدمناه
+  const navigate = useNavigate();
   const [showImg, setShowImg] = useState(true);
 
+  // --- auth info from localStorage ---
+  const token = useMemo(() => localStorage.getItem("token") || "", []);
+  const userId = useMemo(
+    () => Number(localStorage.getItem("userId") || 0),
+    []
+  );
+  const headers = useMemo(
+    () => (token ? { Authorization: `Bearer ${token}` } : {}),
+    [token]
+  );
+
+  // --- display name / initials ---
   const displayName = useMemo(
     () =>
       localStorage.getItem("fullName") ||
@@ -30,27 +45,39 @@ export default function RegistrarHeader({
   );
   const initials = useMemo(() => initialsFrom(displayName, "RG"), [displayName]);
 
+  // --- unread counter for Notifications tab ---
+  const [unreadCount, setUnreadCount] = useState(0);
+  async function loadCounts() {
+    if (!userId) return;
+    try {
+      const url = `${API_BASE}/Notifications/counts?receiverId=${userId}`;
+      const res = await axios.get(url, { headers });
+      setUnreadCount(Number(res.data?.unread || 0));
+    } catch (e) {
+      // سكون صامت، ما نزعج المستخدم
+      // console.error("loadCounts error", e);
+    }
+  }
+  useEffect(() => {
+    loadCounts();
+    const id = setInterval(loadCounts, 30000); // update every 30s
+    return () => clearInterval(id);
+  }, []); // أول مرّة فقط
+
   const goProfile = () => navigate("/account");
 
   const handleSignOut = async (e) => {
-    // ننفذ قبل الـ click الافتراضي
     e?.preventDefault?.();
     e?.stopPropagation?.();
 
     try {
-      // await axios.post(`${API_BASE}/auth/logout`, {}, { withCredentials: true });
-
       localStorage.removeItem("token");
       localStorage.removeItem("userId");
       localStorage.removeItem("fullName");
       localStorage.removeItem("userName");
       localStorage.removeItem("email");
-
       localStorage.setItem("logout_broadcast", String(Date.now()));
-
-      if (typeof onSignOut === "function") {
-        await Promise.resolve(onSignOut());
-      }
+      if (typeof onSignOut === "function") await Promise.resolve(onSignOut());
     } finally {
       window.location.replace(redirectAfter);
     }
@@ -80,6 +107,20 @@ export default function RegistrarHeader({
             <NavLink className="nav-link" to="/">Home</NavLink>
             <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
             <NavLink className="nav-link" to="/registrar/irregular">Irregular Students</NavLink>
+
+            {/* === New: Notifications tab === */}
+            <NavLink className="nav-link position-relative" to="/registrar/notifications">
+              <span className="me-1"></span> Notifications
+              {unreadCount > 0 && (
+                <span
+                  className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
+                  style={{ fontSize: 10 }}
+                >
+                  {unreadCount > 99 ? "99+" : unreadCount}
+                  <span className="visually-hidden">unread</span>
+                </span>
+              )}
+            </NavLink>
           </div>
 
           <div className="dropdown">
@@ -117,14 +158,12 @@ export default function RegistrarHeader({
                 </button>
               </li>
               <li><hr className="dropdown-divider" /></li>
-
-              {/* onClickCapture */}
               <li>
                 <a
                   href={redirectAfter}
                   className="dropdown-item text-danger"
                   onClickCapture={handleSignOut}
-                  onClick={(e) => e.preventDefault()} 
+                  onClick={(e) => e.preventDefault()}
                 >
                   Log Out
                 </a>

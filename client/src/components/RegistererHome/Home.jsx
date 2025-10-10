@@ -8,6 +8,7 @@ import AddIrregularStudent from "./AddIrregularStudent";
 import RegistrarProfile from "../Profiles/RegistrarProfile.jsx";
 import OfferElective from "../OfferElective/ViewElectiveRequests.jsx";
 import RegistrarRequests from "./RegistrarRequests.jsx";
+import RegistrarNotifications from "./RegistrarNotifications.jsx";
 
 /* ======================= Dashboard ======================= */
 function Dashboard() {
@@ -161,6 +162,8 @@ export default function Home() {
 
         {/* (اختياري) لو في /requests بدون /registrar */}
         <Route path="/requests" element={<RegistrarRequests />} />
+        <Route path="/registrar/notifications" element={<RegistrarNotifications />} />
+
 
         {/* ⚠️ إزالة التكرار الذي كان يكتب /registrar/requests مرة ثانية */}
         {/* <Route path="/registrar/requests" element={<CommitteeRequests />} /> */}
