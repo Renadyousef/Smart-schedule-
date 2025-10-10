@@ -23,6 +23,9 @@ import Electives_on_sc from './routes/ElectivesOffersRoute.js'
 import notificationsRouter from "./routes/notificationsRoutes.js";
 
 
+import notificationsRouter from "./routes/notifications.routes.js";
+
+
 const app = express();
 
 // If you serve frontend from Vite on 5173:
@@ -51,6 +54,8 @@ app.use("/api/sections", sectionsRoutes);
 app.use("/irregular", addIrregularRoute);
 app.use("/api/feedback", feedbackRoutes);
 app.use("/registrarRequests", RegistrarRequestsRoutes);
+// ...
+app.use("/api/notifications", notificationsRouter);
 
 app.use("/createRequests", CreateRequestsRoutes);
 

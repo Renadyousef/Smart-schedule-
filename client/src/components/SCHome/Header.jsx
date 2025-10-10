@@ -8,7 +8,11 @@ export default function Header({ onLogout }) {
   const goProfile = () => navigate("/account");
 
   const LinkEl = ({ to, children }) => (
-    <NavLink className={({ isActive }) => "nav-link" + (isActive ? " active" : "")} to={to}>
+    <NavLink
+      className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
+      to={to}
+      end
+    >
       {children}
     </NavLink>
   );
@@ -33,7 +37,7 @@ export default function Header({ onLogout }) {
         </button>
 
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
-          {/* روابط SC — مطابقة لأسماء الملفات */}
+          {/* روابط SC */}
           <div className="navbar-nav me-auto">
             <LinkEl to="/">Home</LinkEl>
             <LinkEl to="/external-courses">External Courses</LinkEl>
@@ -41,13 +45,10 @@ export default function Header({ onLogout }) {
             <LinkEl to="/generated-schedule">Generated Schedule</LinkEl>
             <LinkEl to="/share-schedule">Share Schedule</LinkEl>
             <LinkEl to="/manage">Manage scheduling rules</LinkEl>
-             {/* <NavLink className="nav-link" to="/requests">Requests</NavLink> */}
-              <NavLink className="nav-link" to="/requests/new">Create Request</NavLink>
-                 <NavLink className="nav-link" to="/Electives/handel">Electives</NavLink>
-              <NavLink className="nav-link" to="/Notification">Notification</NavLink>
-                 {/**Notification */}
+            <NavLink className="nav-link" to="/requests/new">Create Request</NavLink>
+            <NavLink className="nav-link" to="/Electives/handel">Electives</NavLink>
+            
           </div>
-       
 
           {/* منيو المستخدم */}
           <div className="dropdown">
@@ -79,10 +80,26 @@ export default function Header({ onLogout }) {
               </span>
             </button>
 
-            <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuBtn">
-              <li><button className="dropdown-item" onClick={goProfile}>View Profile</button></li>
-              <li><hr className="dropdown-divider" /></li>
-              <li><button className="dropdown-item text-danger" onClick={onLogout}>Log out</button></li>
+            <ul
+              className="dropdown-menu dropdown-menu-end"
+              aria-labelledby="userMenuBtn"
+            >
+              <li>
+                <button className="dropdown-item" onClick={goProfile}>
+                  View Profile
+                </button>
+              </li>
+              <li>
+                <hr className="dropdown-divider" />
+              </li>
+              <li>
+                <button
+                  className="dropdown-item text-danger"
+                  onClick={onLogout}
+                >
+                  Log out
+                </button>
+              </li>
             </ul>
           </div>
         </div>

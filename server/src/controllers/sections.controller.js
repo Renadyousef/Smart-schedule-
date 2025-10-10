@@ -5,7 +5,6 @@ import pool from "../../DataBase_config/DB_config.js";
 export async function getCoursesByLevel(req, res) {
   try {
     const level = Number(req.query.level);
-    const status = "draft"; // أو خليه من الكويري إذا تبين
     const includeSlots = req.query.includeSlots === "1";
 
     if (!Number.isInteger(level)) {
@@ -23,13 +22,12 @@ export async function getCoursesByLevel(req, res) {
       ? `LEFT JOIN "ScheduleSlot" sl ON sl."SlotID" = s."SlotID"`
       : "";
 
-    const slotOrder = includeSlots
-      ? `sl."DayOfWeek" NULLS LAST, sl."StartTime" NULLS LAST,`
-      : "";
-
+    // 🔒 فلترة ثابتة على draft فقط
     const sql = `
       SELECT
-        sch."ScheduleID"               AS "ScheduleID",   -- ✅ مهم للواجهة
+        sch."ScheduleID"               AS "ScheduleID",
+        sch."Level"                    AS "Level",
+        sch."Status"                   AS "Status",
         c."course_code",
         c."course_name",
         LOWER(c."course_type")         AS "course_type",
@@ -40,19 +38,19 @@ export async function getCoursesByLevel(req, res) {
       JOIN "Schedule" sch ON sch."ScheduleID" = s."ScheduleID"
       JOIN "courses"  c   ON c."CourseID"    = s."CourseID"
       ${slotJoin}
-      WHERE sch."Level" = $1 AND LOWER(sch."Status") = $2
-      ORDER BY ${slotOrder} c."course_code", s."SectionID";
+      WHERE sch."Level" = $1
+        AND LOWER(sch."Status") = 'draft'
+      ORDER BY
+        ${includeSlots ? `sl."DayOfWeek" NULLS LAST, sl."StartTime" NULLS LAST,` : ""}
+        c."course_code", s."SectionID";
     `;
 
-    const { rows } = await pool.query(sql, [level, status]);
-
-    // نرجّع scheduleId صريحًا (لو فيه صفوف)
-    const scheduleId =
-      rows?.[0]?.ScheduleID !== undefined ? rows[0].ScheduleID : null;
+    const { rows } = await pool.query(sql, [level]);
+    const scheduleId = rows?.[0]?.ScheduleID ?? null;
 
     return res.json({
-      scheduleId,                     // ✅ هذا ما تحتاجه الواجهة لتمكين زر الإرسال
-      meta: { level, status, includeSlots, count: rows.length },
+      scheduleId,
+      meta: { level, status: "draft", includeSlots, count: rows.length },
       rows,
     });
   } catch (err) {
