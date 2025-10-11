@@ -46,9 +46,6 @@ Please download the compatible versions for your device:
 ## License
 
 This project is licensed under the **MIT License** — see below for details.
-MIT License
-
-Copyright (c) 2025 < Smart Schedule group3>
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
