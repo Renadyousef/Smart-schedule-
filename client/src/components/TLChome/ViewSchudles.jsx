@@ -122,16 +122,40 @@ export default function ViewSchedules() {
   }
 };
 
+//sending feedback to router in here 
+const submitFeedback = async () => {
+  if (!comment.trim() || !groupsData.length || !activeGroup) return;
+  setSubmitting(true);
 
-  const submitFeedback = () => {
-    setSubmitting(true);
-    setTimeout(() => {
-      alert(`Feedback submitted: ${comment}`);
-      setSubmitting(false);
-      setShowModal(false);
-      setComment("");
-    }, 500);
-  };
+  // Get the currently active group's scheduleId
+  const group = groupsData.find(g => (g.meta?.groupNo || 1) === activeGroup);
+  if (!group) {
+    alert("No active schedule selected");
+    setSubmitting(false);
+    return;
+  }
+  const scheduleId = group.scheduleId;
+
+  try {
+    const token = localStorage.getItem("token"); 
+    const res = await axios.post(
+      "http://localhost:5000/Schudles/feedback",
+      { comment, scheduleId }, // <-- send scheduleId here
+      { headers: { Authorization: `Bearer ${token}` } } 
+    );
+
+    alert(res.data.message || "Feedback submitted successfully!");
+    setShowModal(false);
+    setComment("");
+  } catch (err) {
+    console.error("Error submitting feedback:", err);
+    alert("Failed to submit feedback");
+  } finally {
+    setSubmitting(false);
+  }
+};
+
+
 
   return (
     <div className="container my-4">
