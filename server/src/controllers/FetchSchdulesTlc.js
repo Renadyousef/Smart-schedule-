@@ -26,14 +26,14 @@ function normalizeType(type, courseName) {
 }
 
 /**
- * Fetch all approved schedules for a level (multiple groups)
+ * Fetch all  schedules for a level multiple groups
  */
 export const getSchedulesByLevel = async (req, res) => {
   try {
     const level = Number(req.query.level);
     if (!Number.isInteger(level)) return res.status(400).json({ error: "level must be integer" });
 
-    const statusFilter = "approved";
+    const statusFilter = "shared";
     const sqlSchedules = `
       SELECT "ScheduleID","Level","GroupNo","Status"
       FROM "Schedule"
@@ -95,9 +95,9 @@ export const getSchedulesByCourse = async (req, res) => {
     if (!Number.isInteger(courseId))
       return res.status(400).json({ error: "courseId must be integer" });
 
-    const statusFilter = "approved";
+    const statusFilter = "shared";
 
-    // ✅ Select distinct schedules only
+    // Select distinct schedules only
     const sqlSchedules = `
       SELECT DISTINCT sch."ScheduleID", sch."Level", sch."GroupNo", sch."Status"
       FROM "Schedule" sch

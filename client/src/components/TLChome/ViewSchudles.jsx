@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import axios from "axios";
-
+import Footer from "../Footer/Footer";
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
 const TIMES = [
   "08:00 - 08:50",
@@ -147,7 +147,8 @@ export default function ViewSchedules() {
   };
 
   return (
-    <div className="container my-4">
+        <div className="d-flex flex-column min-vh-100">
+    <div className="container my-4 flex-grow-1">
       <style>{`
         .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; margin-bottom:40px;}
         th, td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden; }
@@ -319,36 +320,7 @@ export default function ViewSchedules() {
       {groupsData.length > 0 && (
         <>
           {/* Legend */}
-          <div className="d-flex justify-content-center align-items-center flex-wrap gap-3 mt-2 mb-4">
-            <div className="legend-box">
-              <div
-                className="legend-color"
-                style={{ backgroundColor: PALETTE.core }}
-              ></div>
-              Core / Lecture
-            </div>
-            <div className="legend-box">
-              <div
-                className="legend-color"
-                style={{ backgroundColor: PALETTE.tutorial }}
-              ></div>
-              Tutorial
-            </div>
-            <div className="legend-box">
-              <div
-                className="legend-color"
-                style={{ backgroundColor: PALETTE.lab }}
-              ></div>
-              Lab
-            </div>
-            <div className="legend-box">
-              <div
-                className="legend-color"
-                style={{ backgroundColor: PALETTE.elective }}
-              ></div>
-              Elective
-            </div>
-          </div>
+        
 
           {/* Feedback */}
           <div className="text-center mt-3">
@@ -428,6 +400,10 @@ export default function ViewSchedules() {
           )}
         </>
       )}
+
     </div>
+    <Footer/>
+    </div>
+
   );
 }
