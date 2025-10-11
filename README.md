@@ -103,13 +103,13 @@ code . to open it in VS Code
 cd client
 npm install
 
-# 3. Install dependencies for server
+# 3. Install dependencies for the server
 cd ../
 npm install
 
 # 4. Create a .env file in the root of the project
 # paste the following keys
-# Note: JWT_SECRET will be changed at deployment for added security
+# Note: JWT_SECRET will be changed at deployment for security purposes
 echo "JWT_SECRET=your_super_secret_key_here" 
 echo "OPENAI_API_KEY=**we can't commit this to GitHub, OpenAI disables committed keys for their security purposes**
 
