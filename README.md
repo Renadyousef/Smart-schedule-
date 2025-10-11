@@ -48,8 +48,9 @@ Follow these steps to get the project running on your local machine:
 
 ```bash
 # 1. Clone the repository
-git clone <your-repo-url>
+git clone <repo-url>
 cd <your-repo-folder>
+code . to open it in VS Code
 
 # 2. Install dependencies for client
 cd client
@@ -60,10 +61,10 @@ cd ../server
 npm install
 
 # 4. Create a .env file in the root of the project
-# Add the following keys
+# paste the following keys
 # Note: JWT_SECRET will be changed at deployment for added security
-echo "JWT_SECRET=your_super_secret_key_here" >> .env
-echo "OPENAI_API_KEY=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" >> .env
+echo "JWT_SECRET=your_super_secret_key_here" 
+echo "OPENAI_API_KEY=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" 
 
 # 5. Run the server
 cd server
