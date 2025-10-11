@@ -110,8 +110,8 @@ npm install
 # 4. Create a .env file in the root of the project
 # paste the following keys
 # Note: JWT_SECRET will be changed at deployment for security purposes
-echo "JWT_SECRET=your_super_secret_key_here" 
-echo "OPENAI_API_KEY=**we can't commit this to GitHub, OpenAI disables committed keys for their security purposes**
+JWT_SECRET=your_super_secret_key_here
+OPENAI_API_KEY= ##**we can't commit this to GitHub, OpenAI disables committed keys for their security purposes**
 
 # 5. Run the server
 # Note: By default, the server runs on port 5000. 
