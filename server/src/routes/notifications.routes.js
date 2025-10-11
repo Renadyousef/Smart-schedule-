@@ -8,13 +8,8 @@ import {
 
 const router = express.Router();
 
-// قائمة إشعارات SC (مع فلاتر اختيارية)
 router.get("/sc", getSCNotifications);
-
-// تعليم إشعار واحد كمقروء/غير مقروء
 router.put("/:id/read", express.json(), markNotificationRead);
-
-// تعليم كل إشعارات SC كمقروء
-router.put("/sc/mark-all-read", markAllSCRead);
+router.put("/sc/mark-all-read", express.json(), markAllSCRead);
 
 export default router;
