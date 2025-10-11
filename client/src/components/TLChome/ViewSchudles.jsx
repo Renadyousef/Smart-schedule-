@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import axios from "axios";
 
@@ -27,8 +27,9 @@ function colorOf(type) {
 export default function ViewSchedules() {
   const [levelFilter, setLevelFilter] = useState("");
   const [courseFilter, setCourseFilter] = useState("");
-  const [scheduleGrid, setScheduleGrid] = useState({});
+  const [groupsData, setGroupsData] = useState([]);
   const [courses, setCourses] = useState([]);
+  const [activeGroup, setActiveGroup] = useState(null);
   const [approving, setApproving] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [comment, setComment] = useState("");
@@ -48,7 +49,8 @@ export default function ViewSchedules() {
   // Fetch schedules when level OR course changes
   useEffect(() => {
     if (!levelFilter && !courseFilter) {
-      setScheduleGrid({});
+      setGroupsData([]);
+      setActiveGroup(null);
       return;
     }
 
@@ -62,29 +64,16 @@ export default function ViewSchedules() {
     axios
       .get(url)
       .then((res) => {
-        const data = Array.isArray(res.data.rows) ? res.data.rows : res.data;
-        const grid = {};
-
-        for (const s of data) {
-          const day = s.DayOfWeek || "Monday";
-          const start = s.StartTime?.slice(0, 5) || "08:00";
-          const end = s.EndTime?.slice(0, 5) || "08:50";
-          const time = `${start} - ${end}`;
-
-          if (!grid[day]) grid[day] = {};
-          grid[day][time] = {
-            subject: s.course_name,
-            room: s.room || "N/A",
-            type: s.course_type || "core",
-            duration: 1,
-          };
-        }
-
-        setScheduleGrid(grid);
+        const groups = Array.isArray(res.data.groups)
+          ? res.data.groups
+          : [{ meta: { groupNo: 1 }, slots: Array.isArray(res.data.rows) ? res.data.rows : [] }];
+        setGroupsData(groups);
+        setActiveGroup(groups[0]?.meta?.groupNo || 1);
       })
       .catch((err) => {
         console.error("Error fetching schedule:", err);
-        setScheduleGrid({});
+        setGroupsData([]);
+        setActiveGroup(null);
       });
   }, [levelFilter, courseFilter]);
 
@@ -106,17 +95,18 @@ export default function ViewSchedules() {
     }, 500);
   };
 
-  const skip = useMemo(() => ({}), [scheduleGrid]);
-
   return (
     <div className="container my-4">
       <style>{`
-        .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; }
+        .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; margin-bottom:40px;}
         th, td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden; }
         .subject-box { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; font-size:.9rem; }
         .room { font-size:.75rem; color:#333; }
         .btn-feedback { background-color:#e9f2ff; border:none; border-radius:30px; padding:14px 40px; font-weight:700; font-size:1.05rem; color:#0b3a67; }
         .btn-feedback:hover { background-color:#cce5ff; }
+        .tabs { display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap; }
+        .tab-btn { padding:6px 16px; border:none; border-radius:8px; cursor:pointer; background:#f1f3f5; font-weight:600; }
+        .tab-btn.active { background:#cce5ff; color:#0b3a67; }
       `}</style>
 
       {/* Filters + Approve */}
@@ -131,9 +121,7 @@ export default function ViewSchedules() {
           >
             <option value="">Select Level</option>
             {[1, 2, 3, 4, 5, 6, 7, 8].map((lv) => (
-              <option key={lv} value={lv}>
-                {lv}
-              </option>
+              <option key={lv} value={lv}>{lv}</option>
             ))}
           </select>
         </div>
@@ -148,9 +136,7 @@ export default function ViewSchedules() {
           >
             <option value="">Select Course</option>
             {courses.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
+              <option key={c.id} value={c.id}>{c.name}</option>
             ))}
           </select>
         </div>
@@ -166,77 +152,95 @@ export default function ViewSchedules() {
         </div>
       </div>
 
-      {/* Table */}
-      <table className="table-fixed">
-        <thead>
-          <tr>
-            <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
-            {DAYS.map((d) => (
-              <th key={d} style={{ backgroundColor: "#f1f3f5" }}>
-                {d}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {TIMES.map((time, ti) => (
-            <tr key={time}>
-              <td
-                className="fw-bold"
-                style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}
-              >
-                {time}
-              </td>
-              {DAYS.map((day) => {
-                const key = `${day}#${ti}`;
-                if (skip[key]) return null;
+      {/* Group Tabs */}
+      <div className="tabs">
+        {groupsData.map((g) => (
+          <button
+            key={g.meta?.groupNo || 1}
+            className={`tab-btn ${activeGroup === (g.meta?.groupNo || 1) ? "active" : ""}`}
+            onClick={() => setActiveGroup(g.meta?.groupNo || 1)}
+          >
+            Group {g.meta?.groupNo || 1}
+          </button>
+        ))}
+      </div>
 
-                const slot = scheduleGrid?.[day]?.[time];
-                if (!slot) return <td key={day}></td>;
+      {/* Table for active group */}
+      {groupsData
+        .filter((g) => (g.meta?.groupNo || 1) === activeGroup)
+        .map((group) => {
+          const skip = {};
+          const grid = {};
+          group.slots.forEach((s) => {
+            const day = s.day || "Monday";
+            const start = s.start || "08:00";
+            const end = s.end || "08:50";
+            const time = `${start} - ${end}`;
+            if (!grid[day]) grid[day] = {};
+            grid[day][time] = {
+              subject: s.course_name,
+              room: s.room || "N/A",
+              type: s.course_type || "core",
+              duration: 1,
+            };
+          });
 
-                const bg = colorOf(slot.type);
-                const rowSpan = Math.max(1, slot.duration || 1);
+          return (
+            <table className="table-fixed" key={group.meta?.groupNo || 1}>
+              <thead>
+                <tr>
+                  <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
+                  {DAYS.map((d) => (
+                    <th key={d} style={{ backgroundColor: "#f1f3f5" }}>{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {TIMES.map((time, ti) => (
+                  <tr key={time}>
+                    <td className="fw-bold" style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}>
+                      {time}
+                    </td>
+                    {DAYS.map((day) => {
+                      const key = `${day}#${ti}`;
+                      if (skip[key]) return null;
 
-                if (rowSpan > 1) {
-                  for (let k = 1; k < rowSpan; k++) {
-                    const nextIdx = ti + k;
-                    if (nextIdx < TIMES.length)
-                      skip[`${day}#${nextIdx}`] = true;
-                  }
-                }
+                      const slot = grid?.[day]?.[time];
+                      if (!slot) return <td key={day}></td>;
 
-                return (
-                  <td key={day} rowSpan={rowSpan}>
-                    <div
-                      className="subject-box"
-                      style={{ backgroundColor: bg }}
-                    >
-                      {slot.subject}
-                      <div className="room">Room {slot.room}</div>
-                    </div>
-                  </td>
-                );
-              })}
-            </tr>
-          ))}
-        </tbody>
-      </table>
+                      const bg = colorOf(slot.type);
+                      const rowSpan = Math.max(1, slot.duration || 1);
+
+                      for (let k = 1; k < rowSpan; k++) {
+                        const nextIdx = ti + k;
+                        if (nextIdx < TIMES.length) skip[`${day}#${nextIdx}`] = true;
+                      }
+
+                      return (
+                        <td key={day} rowSpan={rowSpan}>
+                          <div className="subject-box" style={{ backgroundColor: bg }}>
+                            {slot.subject}
+                            <div className="room">Room {slot.room}</div>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          );
+        })}
 
       {/* Feedback Modal */}
       <div className="text-center mt-3">
-        <button
-          className="btn-feedback"
-          onClick={() => setShowModal(true)}
-        >
+        <button className="btn-feedback" onClick={() => setShowModal(true)}>
           Give Feedback
         </button>
       </div>
 
       {showModal && (
-        <div
-          className="modal fade show"
-          style={{ display: "block", background: "rgba(0,0,0,.35)" }}
-        >
+        <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content" style={{ borderRadius: "20px" }}>
               <div
@@ -249,11 +253,7 @@ export default function ViewSchedules() {
                 }}
               >
                 <h5 className="modal-title">Feedback</h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  onClick={() => setShowModal(false)}
-                ></button>
+                <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
               </div>
               <div className="modal-body">
                 <textarea
@@ -267,11 +267,7 @@ export default function ViewSchedules() {
               <div className="modal-footer d-flex gap-2">
                 <button
                   className="btn btn-outline-secondary"
-                  style={{
-                    borderRadius: "12px",
-                    padding: "8px 18px",
-                    fontWeight: "600",
-                  }}
+                  style={{ borderRadius: "12px", padding: "8px 18px", fontWeight: "600" }}
                   onClick={() => setShowModal(false)}
                   disabled={submitting}
                 >
