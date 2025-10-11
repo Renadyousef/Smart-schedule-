@@ -1,5 +1,5 @@
+// src/components/SCHome/SC_Home.jsx
 import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
-
 import Header from "./Header";
 import ManageRules from "../ManageSchduling_rules/ManageRules";
 import SCCommitteeProfile from "../Profiles/SCCommitteeProfile.jsx";
@@ -9,7 +9,7 @@ import GeneratedSchedule from "./GeneratedSchedule.jsx";
 import ShareSchedule from "./ShareSchedule.jsx";
 import CreateRequest from "./CreateRequest.jsx";
 import ManageElectives from "../ElectivesSc.jsx";
-
+import Footer from "../Footer/Footer.jsx"; // ✅ استيراد الفوتر
 
 // ✅ استيراد صفحة الهوم (Landing)
 import SCHomeLanding from "../SCHome/SCHomeLanding.jsx";
@@ -32,8 +32,9 @@ export default function SC_Home({ onLogout }) {
         <Route path="/manage" element={<ManageRules />} />
         <Route path="/account" element={<SCCommitteeProfile />} />
         <Route path="/Electives/handel" element={<ManageElectives />} />
-  
       </Routes>
+
+      <Footer /> {/* ✅ الفوتر يظهر في جميع الصفحات */}
     </Router>
   );
 }

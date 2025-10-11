@@ -422,6 +422,61 @@ export default function FixedSchedule({
           padding: 12px;
           background: #ffffff;
           box-shadow: 0 8px 24px rgba(16,24,40,.05);
+          @media (max-width: 768px) {
+    .table-fixed {
+      display: block;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+
+    th, td {
+      font-size: 0.75rem;
+      height: 55px;
+      padding: 2px;
+    }
+
+    .subject-box {
+      font-size: 0.75rem;
+      line-height: 1.1;
+      padding: 4px;
+    }
+
+    .room {
+      font-size: 0.65rem;
+    }
+
+    h2 {
+      font-size: 1.2rem;
+    }
+
+    .btn-feedback {
+      padding: 10px 20px;
+      font-size: 0.9rem;
+    }
+
+    .legend-box {
+      font-size: 0.8rem;
+    }
+
+    .container.my-4 {
+      padding-left: 8px;
+      padding-right: 8px;
+    }
+
+    .tab-card {
+      padding: 8px;
+    }
+  }
+
+  @media (max-width: 390px) {
+    .subject-box {
+      font-size: 0.7rem;
+    }
+    th, td {
+      font-size: 0.7rem;
+      height: 50px;
+    }
+  }
         }
       `}</style>
 
