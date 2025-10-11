@@ -64,6 +64,18 @@ const DEFAULT_LECTURE_START = "08:00";
 const DEFAULT_TUTORIAL_START = "10:00";
 const VALID_DAYS = new Set(["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"]);
 
+const DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday",
+];
+
+const DAY_INDEX = new Map(DAY_NAMES.map((name, index) => [name.toLowerCase(), index]));
+
 function formatTime(hour, minute) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
 }
@@ -222,6 +234,164 @@ function validateDayTime(day, start, end) {
     return "End time must be after start time";
   }
   return null;
+}
+
+function parseTimeToMinutes(value) {
+  if (!value) return null;
+  const parts = value.split(":").map((part) => Number(part));
+  if (!parts.length) return null;
+  const [hour, minute = 0] = parts;
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
+  return hour * 60 + minute;
+}
+
+function normalizeDayName(value) {
+  if (!value) return null;
+  const key = value.trim().toLowerCase();
+  for (const day of DAY_NAMES) {
+    if (day.toLowerCase() === key) return day;
+  }
+  return null;
+}
+
+function parseDayConstraints(raw) {
+  if (!raw) return null;
+  const tokens = raw
+    .split(",")
+    .map((token) => token.trim())
+    .filter(Boolean);
+
+  if (!tokens.length) return null;
+
+  const daySet = new Set();
+
+  for (const token of tokens) {
+    const rangeParts = token.split("-").map((part) => part.trim());
+    if (rangeParts.length === 1) {
+      const day = normalizeDayName(rangeParts[0]);
+      if (day) daySet.add(day);
+      continue;
+    }
+
+    const start = normalizeDayName(rangeParts[0]);
+    const end = normalizeDayName(rangeParts[1]);
+    if (!start || !end) continue;
+
+    const startIdx = DAY_INDEX.get(start.toLowerCase());
+    const endIdx = DAY_INDEX.get(end.toLowerCase());
+    if (startIdx === undefined || endIdx === undefined) continue;
+
+    if (startIdx <= endIdx) {
+      for (let i = startIdx; i <= endIdx; i += 1) {
+        daySet.add(DAY_NAMES[i]);
+      }
+    } else {
+      for (let i = startIdx; i < DAY_NAMES.length; i += 1) {
+        daySet.add(DAY_NAMES[i]);
+      }
+      for (let i = 0; i <= endIdx; i += 1) {
+        daySet.add(DAY_NAMES[i]);
+      }
+    }
+  }
+
+  return daySet.size ? daySet : null;
+}
+
+function parseTimeBlock(raw) {
+  if (!raw) return null;
+  const parts = raw.split("-").map((part) => part.trim());
+  if (parts.length !== 2) return null;
+  const start = parseTimeToMinutes(parts[0]);
+  const end = parseTimeToMinutes(parts[1]);
+  if (start === null || end === null || start >= end) return null;
+  return {
+    start,
+    end,
+    label: `${parts[0]}-${parts[1]}`,
+  };
+}
+
+function parseAppliesToLevels(raw) {
+  if (!raw || raw === "All") return null;
+  const numeric = Number(raw);
+  if (Number.isFinite(numeric)) return [numeric];
+  const candidates = raw
+    .split(",")
+    .map((token) => Number(token.trim()))
+    .filter((value) => Number.isFinite(value));
+  return candidates.length ? candidates : null;
+}
+
+function parseRuleRow(row) {
+  const timeBlock = parseTimeBlock(row.timeBlock);
+  const daySet = parseDayConstraints(row.dayConstraints);
+  const appliesToLevels = parseAppliesToLevels(row.applies_to);
+  const courseType = (row.course_type || "").toLowerCase() || null;
+
+  return {
+    description: row.description || "",
+    appliesToLevels,
+    courseType,
+    timeBlock,
+    daySet,
+  };
+}
+
+function formatDaySetForPrompt(daySet) {
+  if (!daySet || daySet.size === 7) return "any day";
+  const ordered = DAY_NAMES.filter((day) => daySet.has(day));
+  if (!ordered.length) return "any day";
+  return ordered.join(", ");
+}
+
+function formatRuleForPrompt(rule) {
+  const levelText = rule.appliesToLevels?.length
+    ? `Level ${rule.appliesToLevels.join(", ")}`
+    : "all levels";
+  const courseTypeText = rule.courseType ? `${rule.courseType} courses` : "all courses";
+  const dayText = formatDaySetForPrompt(rule.daySet);
+  const timeText = rule.timeBlock ? rule.timeBlock.label : "any time";
+  const descriptionText = rule.description ? `${rule.description}. ` : "";
+  return `- ${descriptionText}Do not schedule ${courseTypeText} for ${levelText} on ${dayText} between ${timeText}.`;
+}
+
+function ruleAppliesToSection(rule, section, scheduleLevel) {
+  if (rule.appliesToLevels && (scheduleLevel === null || !rule.appliesToLevels.includes(scheduleLevel))) {
+    return false;
+  }
+
+  if (rule.courseType === "internal" && section?.is_external) return false;
+  if (rule.courseType === "external" && section && section.is_external === false) return false;
+
+  return true;
+}
+
+function detectRuleViolations(rules, slotContext) {
+  const {
+    day,
+    startMinutes,
+    endMinutes,
+    section,
+    scheduleLevel,
+  } = slotContext;
+
+  const issues = [];
+
+  for (const rule of rules) {
+    if (!ruleAppliesToSection(rule, section, scheduleLevel)) continue;
+
+    if (rule.daySet && !rule.daySet.has(day)) continue;
+
+    if (rule.timeBlock) {
+      const overlaps = startMinutes < rule.timeBlock.end && endMinutes > rule.timeBlock.start;
+      if (overlaps) {
+        issues.push(rule.description || rule.timeBlock.label);
+      }
+    }
+  }
+
+  return issues;
 }
 
 /* ---------- 0) Init / Get Schedule ---------- */
@@ -566,6 +736,29 @@ export const generatePreliminarySchedule = async (req, res) => {
   try {
     const { scheduleId } = req.params;
 
+    const scheduleRow = await pool.query(
+      `SELECT "SchedulingCommitteeID","Level"
+         FROM "Schedule"
+        WHERE "ScheduleID"=$1`,
+      [scheduleId]
+    );
+
+    if (!scheduleRow.rowCount) {
+      return res.status(404).json({ msg: "Schedule not found" });
+    }
+
+    const committeeId = scheduleRow.rows[0].SchedulingCommitteeID;
+    const rawLevel = scheduleRow.rows[0]?.Level;
+    let scheduleLevel = null;
+    if (rawLevel !== null && rawLevel !== undefined) {
+      if (typeof rawLevel === "number") {
+        scheduleLevel = Number.isFinite(rawLevel) ? rawLevel : null;
+      } else {
+        const numericLevel = Number(rawLevel);
+        scheduleLevel = Number.isFinite(numericLevel) ? numericLevel : null;
+      }
+    }
+
     const occupied = await pool.query(
       `SELECT s."DayOfWeek" as day, s."StartTime" as start, s."EndTime" as end
          FROM "ScheduleSlot" s
@@ -593,6 +786,10 @@ export const generatePreliminarySchedule = async (req, res) => {
       (row) => !skipCodes.includes((row.course_code || "").toUpperCase())
     );
 
+    const sectionById = new Map(
+      rowsFiltered.map((row) => [Number(row.section_id), { ...row, is_external: false }])
+    );
+
     if (rowsFiltered.length === 0) {
       return res.json({ msg: "Nothing to schedule", count: 0 });
     }
@@ -615,22 +812,22 @@ export const generatePreliminarySchedule = async (req, res) => {
     const rulesDb = await pool.query(
       `SELECT description, "applies_to", "timeBlock", "dayConstraints", course_type
          FROM schedule_rules
-        WHERE committee_id = (SELECT "SchedulingCommitteeID"
-                                FROM "Schedule"
-                               WHERE "ScheduleID"=$1)
+        WHERE committee_id = $1
            OR committee_id IS NULL`,
-      [scheduleId]
+      [committeeId ?? null]
     );
 
-    const allRules = rulesDb.rows.map(r =>
-      `- ${r.description || ""} (applies_to:${r.applies_to || "all"} timeBlock:${r.timeBlock || "any"} days:${r.dayConstraints || "any"} course_type:${r.course_type || "any"})`
-    ).join("\n");
+    const parsedRules = rulesDb.rows.map(parseRuleRow);
+    const enforcingRules = parsedRules.filter((rule) => Boolean(rule.timeBlock));
+    const allRulesText = parsedRules.length
+      ? parsedRules.map((rule) => formatRuleForPrompt(rule)).join("\n")
+      : "None";
 
     const fixedPattern = `
 Time/slot rules:
 - 1 hour = 50 minutes (always include the 10 minute gap afterwards).
 - 2 hours connected = two back-to-back 50 minute slots (e.g., 08:00-08:50 AND 09:00-09:50). Treat this as one meeting that spans two slots.
-- Keep the global lunch break 12:00–13:00 empty.
+- Keep the global lunch break 12:00-13:00 empty.
 
 Lecture spacing rules:
 - Do not place two 1-hour lectures for the same course on the same day unless the connected option is explicitly specified.
@@ -648,12 +845,12 @@ Course-specific patterns (24h clock):
 
     const prompt = `
 You are a university scheduling assistant.
-Working days: Sunday–Thursday.
+Working days: Sunday-Thursday.
 Follow these time rules strictly:
 ${fixedPattern}
 
-Scheduling Rules from database:
-${allRules || "None"}
+Scheduling Rules from database (hard constraints - never place a slot that overlaps these windows):
+${allRulesText}
 
 Occupied slots: ${JSON.stringify(occupied.rows)}
 Internal courses needing schedule: ${JSON.stringify(rowsFiltered)}
@@ -682,6 +879,76 @@ Return ONLY JSON array:
     let placedCount = 0;
 
     for (const a of results) {
+      const sectionId = Number(a.section_id);
+      if (!Number.isFinite(sectionId)) {
+        conflicts.push({
+          section_id: a.section_id,
+          day: a.day,
+          start: a.start,
+          end: a.end,
+          reason: "invalid section id",
+        });
+        continue;
+      }
+
+      const normalizedDay = normalizeDayName(a.day);
+      if (!normalizedDay) {
+        conflicts.push({
+          section_id: sectionId,
+          day: a.day,
+          start: a.start,
+          end: a.end,
+          reason: "invalid day",
+        });
+        continue;
+      }
+
+      const startMinutes = parseTimeToMinutes(a.start);
+      const endMinutes = parseTimeToMinutes(a.end);
+      if (startMinutes === null || endMinutes === null || startMinutes >= endMinutes) {
+        conflicts.push({
+          section_id: sectionId,
+          day: normalizedDay,
+          start: a.start,
+          end: a.end,
+          reason: "invalid time range",
+        });
+        continue;
+      }
+
+      const sectionInfo = sectionById.get(sectionId);
+      if (!sectionInfo) {
+        conflicts.push({
+          section_id: sectionId,
+          day: normalizedDay,
+          start: a.start,
+          end: a.end,
+          reason: "unknown section",
+        });
+        continue;
+      }
+
+      const ruleIssues = enforcingRules.length
+        ? detectRuleViolations(enforcingRules, {
+            day: normalizedDay,
+            startMinutes,
+            endMinutes,
+            section: sectionInfo,
+            scheduleLevel,
+          })
+        : [];
+
+      if (ruleIssues.length) {
+        conflicts.push({
+          section_id: sectionId,
+          day: normalizedDay,
+          start: a.start,
+          end: a.end,
+          reason: `violates rule(s): ${ruleIssues.join('; ')}`,
+        });
+        continue;
+      }
+
       const start = norm(a.start);
       const end = norm(a.end);
 
@@ -692,13 +959,13 @@ Return ONLY JSON array:
             AND "DayOfWeek"=$2
             AND NOT ($4 <= "StartTime" OR $3 >= "EndTime")
           LIMIT 1`,
-        [scheduleId, a.day, start, end]
+        [scheduleId, normalizedDay, start, end]
       );
 
       if (overlap.rowCount) {
         conflicts.push({
-          section_id: a.section_id,
-          day: a.day,
+          section_id: sectionId,
+          day: normalizedDay,
           start: a.start,
           end: a.end,
           reason: "conflicts with existing slot",
@@ -710,12 +977,12 @@ Return ONLY JSON array:
         `INSERT INTO "ScheduleSlot"("ScheduleID","CourseID","DayOfWeek","StartTime","EndTime")
          SELECT $1,"CourseID",$2,$3,$4 FROM "Sections" WHERE "SectionID"=$5
          RETURNING "SlotID"`,
-        [scheduleId, a.day, start, end, a.section_id]
+        [scheduleId, normalizedDay, start, end, sectionId]
       );
 
       await pool.query(
         `UPDATE "Sections" SET "SlotID"=$1 WHERE "SectionID"=$2`,
-        [slot.rows[0].SlotID, a.section_id]
+        [slot.rows[0].SlotID, sectionId]
       );
 
       placedCount += 1;
@@ -797,7 +1064,7 @@ export const approveSchedule = async (req, res) => {
     const scId = await getSchedulingCommitteeId(userId);
 
     const current = await pool.query(
-      `SELECT "Status"
+      `SELECT "Status","Level","GroupNo"
          FROM "Schedule"
         WHERE "ScheduleID"=$1 AND "SchedulingCommitteeID"=$2`,
       [scheduleId, scId]
@@ -824,6 +1091,36 @@ export const approveSchedule = async (req, res) => {
       `UPDATE "Schedule" SET "Status"='approved' WHERE "ScheduleID"=$1`,
       [scheduleId]
     );
+
+    const scheduleLevel = current.rows[0]?.Level ?? null;
+    const scheduleGroup = current.rows[0]?.GroupNo ?? null;
+    const createdByVal = Number.isFinite(Number(userId)) ? Number(userId) : null;
+    const message = "Schedule approved ,you can view it now";
+    const dataPayload = JSON.stringify({
+      action: "schedule_approved",
+      scheduleId,
+      level: scheduleLevel,
+      groupNo: scheduleGroup,
+    });
+
+    try {
+      await pool.query(
+        `INSERT INTO "Notifications"
+          ("ReceiverID","CreatedBy","Message","Type","Entity","EntityId","Data")
+         VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [
+          null,
+          createdByVal,
+          message,
+          "schedule",
+          "Schedule",
+          scheduleId,
+          dataPayload,
+        ]
+      );
+    } catch (notifyErr) {
+      console.warn("approveSchedule: notification insert skipped", notifyErr?.message || notifyErr);
+    }
 
     res.json({ msg: "Schedule approved" });
   } catch (e) {
@@ -1155,4 +1452,5 @@ export const listSchedules = async (req, res) => {
   } catch (e) {
     console.error("listSchedules:", e);
     res.status(500).json({ msg: "Failed to list schedules", error: e.message });
-  }};
+  }
+};
