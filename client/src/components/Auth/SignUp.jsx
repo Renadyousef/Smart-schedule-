@@ -138,7 +138,7 @@ export default function SignUp({ onSignedUp }) {
         <select id="role" className="form-select" value={inputs.role} onChange={handleChange} onBlur={handleBlur} disabled={roleLocked}>
           <option value="">Select your role</option>
           <option value="student">Student</option>
-          <option value="instructor">Instructor</option>
+        
           <option value="sc">Scheduling Committee</option>
           <option value="tlc">Teaching Load Committee</option>
           <option value="registrar">Registrar</option>
