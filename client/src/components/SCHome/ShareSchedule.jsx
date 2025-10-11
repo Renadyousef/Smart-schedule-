@@ -70,13 +70,12 @@ export default function ShareSchedule() {
     ensureSchedule();
   }, [api, scheduleId]);
 
-  const share = async (target) => {
+  const share = async () => {
     if (!scheduleId) return;
-    setBusyFor(target);
+    setBusyFor("tlc");
     try {
       await api.post(`/share/${scheduleId}`);
-      const label = target === "students" ? "students" : "TLC";
-      setMsg(`✅ Schedule shared with ${label}`);
+      setMsg("✅ Schedule shared with TLC");
       setTimeout(() => setMsg(null), 2500);
     } finally {
       setBusyFor(null);
@@ -108,17 +107,10 @@ export default function ShareSchedule() {
         <div className="sc-share-actions">
           <Button
             variant="primary"
-            onClick={() => share("tlc")}
+            onClick={share}
             disabled={busyFor !== null}
           >
             {busyFor === "tlc" ? "Sharing..." : "Share with the TLC"}
-          </Button>
-          <Button
-            variant="outline-primary"
-            onClick={() => share("students")}
-            disabled={busyFor !== null}
-          >
-            {busyFor === "students" ? "Sharing..." : "Share with the students"}
           </Button>
         </div>
       </div>
