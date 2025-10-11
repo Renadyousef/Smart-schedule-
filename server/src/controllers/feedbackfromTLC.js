@@ -14,10 +14,10 @@ export const submitFeedback = async (req, res) => {
       return res.status(401).json({ error: "Unauthorized: user not found" });
     }
 
-    // Insert feedback
+    // Insert feedback with Role = 'tlc'
     const feedbackQuery = `
-      INSERT INTO "Feedback" ("Comment", "ScheduleID", "CreatedAt", "UserID")
-      VALUES ($1, $2, NOW(), $3)
+      INSERT INTO "Feedback" ("Comment", "ScheduleID", "CreatedAt", "UserID", "role")
+      VALUES ($1, $2, NOW(), $3, 'tlc')
       RETURNING *;
     `;
     const feedbackResult = await pool.query(feedbackQuery, [comment, scheduleId, userId]);
@@ -42,7 +42,7 @@ export const submitFeedback = async (req, res) => {
     `;
     const notificationResult = await pool.query(notificationQuery, [
       notificationMessage,
-      userId,                // CreatedBy
+      userId,                 // CreatedBy
       "tlc_schedule_feedback" // Type
     ]);
     const notification = notificationResult.rows[0];
