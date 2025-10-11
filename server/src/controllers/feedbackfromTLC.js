@@ -17,13 +17,13 @@ export const submitFeedback = async (req, res) => {
 
     await client.query("BEGIN");
 
-    // Insert feedback
+    // Insert feedback, btw we didnt inser usr id inseter its value from above 
     const feedbackQuery = `
-      INSERT INTO "Feedback" ("Comment", "ScheduleID", "CreatedAt")
-      VALUES ($1, $2, NOW())
+      INSERT INTO "Feedback" ("Comment", "ScheduleID", "CreatedAt","UserID")
+      VALUES ($1, $2, NOW(),$3)
       RETURNING *;
     `;
-    const feedbackResult = await client.query(feedbackQuery, [comment, scheduleId]);
+    const feedbackResult = await client.query(feedbackQuery, [comment, scheduleId,userId]);
     const feedback = feedbackResult.rows[0];
 
     // Fetch schedule info to include in notification

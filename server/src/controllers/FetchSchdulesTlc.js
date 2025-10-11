@@ -33,7 +33,7 @@ export const getSchedulesByLevel = async (req, res) => {
     const level = Number(req.query.level);
     if (!Number.isInteger(level)) return res.status(400).json({ error: "level must be integer" });
 
-    const statusFilter = "draft";//change here after all logic done
+    const statusFilter = "approved";//change here after all logic done
     const sqlSchedules = `
       SELECT "ScheduleID","Level","GroupNo","Status"
       FROM "Schedule"
