@@ -35,7 +35,7 @@ Key features include:
 
 ---
 
-## Prerequisites before you clone
+## Prerequisites
 Please download the compatible versions for your device:  
 - Node.js (v18 or higher recommended)  
 - npm (comes with Node.js)  
