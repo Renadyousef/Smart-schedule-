@@ -59,6 +59,7 @@ function pickUserAndLevelFromStorage() {
 }
 
 /* ===== لوحة إشعارات بنفس ديزاين SCNotifications ===== */
+/* ===== لوحة إشعارات بدون إظهار respond_request نهائيًا ===== */
 function StudentNotificationsPanel() {
   const [items, setItems] = React.useState([]);
   const [onlyUnread, setOnlyUnread] = React.useState(false);
@@ -70,6 +71,8 @@ function StudentNotificationsPanel() {
 
   const filtered = React.useMemo(() => {
     return items.filter((n) => {
+      // ✅ اخفِ أي إشعار respond_request تمامًا
+      if (n.Type === "respond_request") return false;
       if (onlyUnread && n.IsRead) return false;
       if (typeFilter !== "all" && n.Type !== typeFilter) return false;
       return true;
@@ -81,6 +84,7 @@ function StudentNotificationsPanel() {
     setErr("");
     try {
       const params = {};
+      // حتى لو اختار المستخدم respond_request، سنخفيه لاحقًا بالفلترة أعلاه
       if (typeFilter !== "all") params.type = typeFilter;
       if (onlyUnread) params.unread = 1;
 
@@ -173,7 +177,7 @@ function StudentNotificationsPanel() {
               <option value="schedule_feedback_student">Schedule feedback (student)</option>
               <option value="tlc_schedule_feedback">Schedule feedback (TLC)</option>
               <option value="register_to_scheduler">Elective Offer</option>
-              <option value="respond_request">Respond request</option>
+              {/* تمت إزالة خيار respond_request من الفلتر واجهةً */}
             </select>
           </div>
 
@@ -199,33 +203,26 @@ function StudentNotificationsPanel() {
           <div className="alert alert-warning mb-0">No notifications.</div>
         )}
 
-        {/* قائمة الإشعارات */}
+        {/* قائمة الإشعارات (بدون أي عرض لrespond_request) */}
         <div className="list-group">
           {filtered.map((n) => (
-            <div
-              key={n.NotificationID}
-              className="list-group-item d-flex justify-content-between align-items-start"
-            >
+            <div key={n.NotificationID} className="list-group-item d-flex justify-content-between align-items-start">
               <div className="me-3">
                 <div className="d-flex align-items-center gap-2">
                   <strong>{n.TitleDisplay || "Notification"}</strong>
                   {!n.IsRead && <span className="badge bg-primary">New</span>}
                 </div>
 
-                {/* ✅ لو التايب مو respond_request يظهر فروم والايميل */}
-                {n.Type !== "respond_request" && (
-                  <div className="text-muted small mt-1">
-                    From: {n.Full_name || "Unknown"}
-                    {Number.isFinite(n.ScheduleLevel) && (
-                      <span className="ms-2">
-                        (Level {n.ScheduleLevel}, Group {n.GroupNo ?? 1})
-                      </span>
-                    )}
-                    {n.Email && <div>{n.Email}</div>}
-                  </div>
-                )}
+                <div className="text-muted small mt-1">
+                  From: {n.Full_name || n.CreatedByName || "Unknown"}
+                  {Number.isFinite(n.ScheduleLevel) && (
+                    <span className="ms-2">
+                      (Level {n.ScheduleLevel}, Group {n.GroupNo ?? 1})
+                    </span>
+                  )}
+                  {n.Email && <div>{n.Email}</div>}
+                </div>
 
-                {/* ✅ الرسالة والتاريخ لجميع الأنواع */}
                 <div className="text-body mt-1">{n.Message}</div>
                 <small className="text-muted d-block mt-1">
                   {n.CreatedAt ? new Date(n.CreatedAt).toLocaleString() : ""}
@@ -248,6 +245,7 @@ function StudentNotificationsPanel() {
                     Mark as read
                   </button>
                 )}
+                {/* لا View more ولا أي شيء يخص respond_request */}
               </div>
             </div>
           ))}
