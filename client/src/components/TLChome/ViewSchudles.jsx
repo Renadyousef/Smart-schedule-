@@ -15,13 +15,22 @@ const TIMES = [
 
 const PALETTE = {
   core: "#cce5ff",
-  elective: "#fff9c4",
+  tutorial: "#ffe0b2",
   lab: "#e1bee7",
+  elective: "#fff9c4",
   default: "#f8f9fa",
 };
 
+function normalizeType(type) {
+  const t = String(type || "").toLowerCase();
+  if (t === "tutorial") return "tutorial";
+  if (t === "lab" || t === "laboratory") return "lab";
+  if (t === "elective" || t === "optional") return "elective";
+  return "core";
+}
+
 function colorOf(type) {
-  return PALETTE[type] || PALETTE.default;
+  return PALETTE[normalizeType(type)] || PALETTE.default;
 }
 
 export default function ViewSchedules() {
@@ -35,18 +44,27 @@ export default function ViewSchedules() {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch all courses once
+  // Fetch all courses
   useEffect(() => {
     axios
       .get("http://localhost:5000/Schudles/cources")
       .then((res) => setCourses(Array.isArray(res.data) ? res.data : []))
       .catch((err) => {
-        setCourses([]);
         console.error("Error fetching courses:", err);
+        setCourses([]);
       });
   }, []);
 
-  // Fetch schedules when level OR course changes
+  // Reset the other filter when one changes
+  useEffect(() => {
+    if (courseFilter) setLevelFilter("");
+  }, [courseFilter]);
+
+  useEffect(() => {
+    if (levelFilter) setCourseFilter("");
+  }, [levelFilter]);
+
+  // Fetch schedules
   useEffect(() => {
     if (!levelFilter && !courseFilter) {
       setGroupsData([]);
@@ -64,11 +82,9 @@ export default function ViewSchedules() {
     axios
       .get(url)
       .then((res) => {
-        const groups = Array.isArray(res.data.groups)
-          ? res.data.groups
-          : [{ meta: { groupNo: 1 }, slots: Array.isArray(res.data.rows) ? res.data.rows : [] }];
+        const groups = Array.isArray(res.data.groups) ? res.data.groups : [];
         setGroupsData(groups);
-        setActiveGroup(groups[0]?.meta?.groupNo || 1);
+        setActiveGroup(groups[0]?.meta?.groupNo || null);
       })
       .catch((err) => {
         console.error("Error fetching schedule:", err);
@@ -76,14 +92,36 @@ export default function ViewSchedules() {
         setActiveGroup(null);
       });
   }, [levelFilter, courseFilter]);
+//approve schudle by id
+ const approveSchedule = async () => {
+  if (!groupsData.length || !activeGroup) return;
 
-  const approveSchedule = () => {
-    setApproving(true);
-    setTimeout(() => {
-      alert("Schedule approved!");
-      setApproving(false);
-    }, 500);
-  };
+  const group = groupsData.find(g => (g.meta?.groupNo || 1) === activeGroup);
+  if (!group) return;
+
+  const scheduleId = group.scheduleId; // <-- this is what backend needs
+
+  setApproving(true);
+  try {
+    const token = localStorage.getItem("token"); // or wherever you store JWT
+    const res = await axios.patch(
+      `http://localhost:5000/Schudles/approve/${scheduleId}`,
+      {},
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    alert(res.data.message);
+
+    // Optionally, refresh the schedule list after approval
+    if (levelFilter) setLevelFilter(levelFilter); // triggers useEffect
+    else if (courseFilter) setCourseFilter(courseFilter);
+  } catch (err) {
+    console.error("Error approving schedule:", err);
+    alert("Failed to approve schedule");
+  } finally {
+    setApproving(false);
+  }
+};
+
 
   const submitFeedback = () => {
     setSubmitting(true);
@@ -107,6 +145,8 @@ export default function ViewSchedules() {
         .tabs { display:flex; gap:10px; margin-bottom:15px; flex-wrap: wrap; }
         .tab-btn { padding:6px 16px; border:none; border-radius:8px; cursor:pointer; background:#f1f3f5; font-weight:600; }
         .tab-btn.active { background:#cce5ff; color:#0b3a67; }
+        .legend-box { display:inline-flex; align-items:center; gap:8px; margin:0 10px; font-size:.9rem; font-weight:600; color:#333; }
+        .legend-color { width:20px; height:20px; border-radius:6px; border:1px solid #bbb; }
       `}</style>
 
       {/* Filters + Approve */}
@@ -117,7 +157,7 @@ export default function ViewSchedules() {
             className="form-select"
             style={{ maxWidth: "150px" }}
             value={levelFilter}
-            onChange={(e) => setLevelFilter(e.target.value)}
+            onChange={(e) => setLevelFilter(Number(e.target.value) || "")}
           >
             <option value="">Select Level</option>
             {[1, 2, 3, 4, 5, 6, 7, 8].map((lv) => (
@@ -132,11 +172,13 @@ export default function ViewSchedules() {
             className="form-select"
             style={{ maxWidth: "200px" }}
             value={courseFilter}
-            onChange={(e) => setCourseFilter(e.target.value)}
+            onChange={(e) => setCourseFilter(Number(e.target.value) || "")} // <--- FIX applied
           >
             <option value="">Select Course</option>
             {courses.map((c) => (
-              <option key={c.id} value={c.id}>{c.name}</option>
+              <option key={c.CourseID || c.id} value={c.CourseID || c.id}>
+                {c.CourseName || c.name}
+              </option>
             ))}
           </select>
         </div>
@@ -165,7 +207,7 @@ export default function ViewSchedules() {
         ))}
       </div>
 
-      {/* Table for active group */}
+      {/* Schedule Table */}
       {groupsData
         .filter((g) => (g.meta?.groupNo || 1) === activeGroup)
         .map((group) => {
@@ -173,9 +215,7 @@ export default function ViewSchedules() {
           const grid = {};
           group.slots.forEach((s) => {
             const day = s.day || "Monday";
-            const start = s.start || "08:00";
-            const end = s.end || "08:50";
-            const time = `${start} - ${end}`;
+            const time = `${s.start || "08:00"} - ${s.end || "08:50"}`;
             if (!grid[day]) grid[day] = {};
             grid[day][time] = {
               subject: s.course_name,
@@ -204,16 +244,13 @@ export default function ViewSchedules() {
                     {DAYS.map((day) => {
                       const key = `${day}#${ti}`;
                       if (skip[key]) return null;
-
                       const slot = grid?.[day]?.[time];
                       if (!slot) return <td key={day}></td>;
 
                       const bg = colorOf(slot.type);
                       const rowSpan = Math.max(1, slot.duration || 1);
-
                       for (let k = 1; k < rowSpan; k++) {
-                        const nextIdx = ti + k;
-                        if (nextIdx < TIMES.length) skip[`${day}#${nextIdx}`] = true;
+                        skip[`${day}#${ti + k}`] = true;
                       }
 
                       return (
@@ -232,26 +269,25 @@ export default function ViewSchedules() {
           );
         })}
 
+      {/* Legend */}
+      <div className="d-flex justify-content-center align-items-center flex-wrap gap-3 mt-2 mb-4">
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div>Core / Lecture</div>
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.tutorial }}></div>Tutorial</div>
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div>Lab</div>
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.elective }}></div>Elective</div>
+      </div>
+
       {/* Feedback Modal */}
       <div className="text-center mt-3">
         <button className="btn-feedback" onClick={() => setShowModal(true)}>
           Give Feedback
         </button>
       </div>
-
       {showModal && (
         <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
           <div className="modal-dialog modal-dialog-centered">
             <div className="modal-content" style={{ borderRadius: "20px" }}>
-              <div
-                className="modal-header"
-                style={{
-                  background: "#e9f2ff",
-                  color: "#0b3a67",
-                  borderTopLeftRadius: "20px",
-                  borderTopRightRadius: "20px",
-                }}
-              >
+              <div className="modal-header" style={{ background: "#e9f2ff", color: "#0b3a67", borderTopLeftRadius: "20px", borderTopRightRadius: "20px" }}>
                 <h5 className="modal-title">Feedback</h5>
                 <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
               </div>

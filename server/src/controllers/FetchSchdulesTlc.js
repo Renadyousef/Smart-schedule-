@@ -1,25 +1,39 @@
 import pool from "../../DataBase_config/DB_config.js";
 
-// helpers
+// ---------- helpers ----------
 function toHM(v) {
   if (!v) return null;
   const s = String(v);
   return s.length >= 5 ? s.slice(0, 5) : s;
 }
+
 function normDay(v) {
   if (!v) return null;
   return String(v).trim();
 }
 
+function normalizeType(type, courseName) {
+  const t = String(type || "").toLowerCase();
+  if (t === "tutorial") return "tutorial";
+  if (t === "lab" || t === "laboratory") return "lab";
+  if (t === "elective" || t === "optional") return "elective";
+
+  const name = String(courseName || "").toLowerCase();
+  if (/tutorial/.test(name)) return "tutorial";
+  if (/lab|laborator/.test(name)) return "lab";
+
+  return "core";
+}
+
 /**
- * Fetch all shared schedules for a level (multiple groups)
+ * Fetch all approved schedules for a level (multiple groups) - TLC with colors
  */
 export const getSchedulesByLevel = async (req, res) => {
   try {
     const level = Number(req.query.level);
     if (!Number.isInteger(level)) return res.status(400).json({ error: "level must be integer" });
 
-    const statusFilter = "approved"; // Only fetch shared schedules
+    const statusFilter = "draft";//change here after all logic done
     const sqlSchedules = `
       SELECT "ScheduleID","Level","GroupNo","Status"
       FROM "Schedule"
@@ -32,7 +46,7 @@ export const getSchedulesByLevel = async (req, res) => {
     const groups = [];
     for (const sch of schedules) {
       const slotsSql = `
-        SELECT s."SlotID", sec."SectionID", c.is_external, c.course_code, c.course_name,
+        SELECT s."SlotID", sec."SectionID", c.is_external, c.course_code, c.course_name, c.course_type,
                COALESCE(sec."SectionNumber",1) AS section_number,
                COALESCE(sec."Capacity",30) AS capacity,
                s."DayOfWeek" AS day, s."StartTime" AS start, s."EndTime" AS end
@@ -43,11 +57,13 @@ export const getSchedulesByLevel = async (req, res) => {
         ORDER BY s."DayOfWeek", s."StartTime"
       `;
       const { rows: slotsRaw } = await pool.query(slotsSql, [sch.ScheduleID]);
+
       const slots = slotsRaw.map(r => ({
         ...r,
         day: normDay(r.day),
         start: toHM(r.start),
         end: toHM(r.end),
+        course_type: normalizeType(r.course_type, r.course_name), // this gives colors
       }));
 
       groups.push({
@@ -71,27 +87,65 @@ export const getSchedulesByLevel = async (req, res) => {
 };
 
 /**
- * Fetch schedules by course
+ * Fetch schedules by course - TLC with course_type for colors
  */
-export const getSchedulesByCourse = async (req,res) => {
+export const getSchedulesByCourse = async (req, res) => {
   try {
     const courseId = Number(req.query.courseId);
     if (!Number.isInteger(courseId)) return res.status(400).json({ error: "courseId must be integer" });
 
-    const sql = `
-      SELECT sch."ScheduleID", sch."Level", sch."GroupNo", sch."Status",
-             s."SectionID", s."Room", sl."DayOfWeek" AS day, sl."StartTime" AS start, sl."EndTime" AS end,
-             c.course_name, c.course_code
+    // 1. Get all schedules that contain this course
+    const sqlSchedules = `
+      SELECT sch."ScheduleID", sch."Level", sch."GroupNo", sch."Status"
       FROM "Schedule" sch
-      JOIN "Sections" s ON s."ScheduleID"=sch."ScheduleID"
-      JOIN courses c ON c."CourseID"=s."CourseID"
-      LEFT JOIN "ScheduleSlot" sl ON sl."SlotID"=s."SlotID"
-      WHERE c."CourseID"=$1 AND LOWER(sch."Status")='shared'
-      ORDER BY sch."GroupNo", s."SectionID";
+      JOIN "ScheduleSlot" sl ON sl."ScheduleID" = sch."ScheduleID"
+      WHERE sl."CourseID" = $1 AND LOWER(sch."Status")='shared'
+      ORDER BY sch."Level", sch."GroupNo", sch."ScheduleID";
     `;
-    const { rows } = await pool.query(sql,[courseId]);
+    const { rows: schedules } = await pool.query(sqlSchedules, [courseId]);
+    if (!schedules.length) return res.json({ meta:{courseId, groupsCount:0}, groups: [] });
 
-    res.json({ meta:{courseId, count: rows.length}, rows });
+    const groups = [];
+    for (const sch of schedules) {
+      // 2. Get slots only for this course
+      const slotsSql = `
+        SELECT s."SlotID", sec."SectionID", c.is_external, c.course_code, c.course_name, c.course_type,
+               COALESCE(sec."SectionNumber",1) AS section_number,
+               COALESCE(sec."Capacity",30) AS capacity,
+               s."DayOfWeek" AS day, s."StartTime" AS start, s."EndTime" AS end,
+               s."Room"
+        FROM "ScheduleSlot" s
+        JOIN courses c ON c."CourseID"=s."CourseID"
+        LEFT JOIN "Sections" sec ON sec."SlotID"=s."SlotID"
+        WHERE s."ScheduleID"=$1 AND s."CourseID"=$2
+        ORDER BY s."DayOfWeek", s."StartTime"
+      `;
+      const { rows: slotsRaw } = await pool.query(slotsSql, [sch.ScheduleID, courseId]);
+
+      const slots = slotsRaw.map(r => ({
+        ...r,
+        day: r.day?.trim() || null,
+        start: r.start?.toString().slice(0,5) || null,
+        end: r.end?.toString().slice(0,5) || null,
+        course_type: (r.course_type || "").toLowerCase() === "tutorial" ? "tutorial" :
+                     (r.course_type || "").toLowerCase() === "lab" || (r.course_type || "").toLowerCase() === "laboratory" ? "lab" :
+                     (r.course_type || "").toLowerCase() === "elective" || (r.course_type || "").toLowerCase() === "optional" ? "elective" :
+                     "core"
+      }));
+
+      groups.push({
+        scheduleId: sch.ScheduleID,
+        meta: {
+          level: sch.Level,
+          status: sch.Status,
+          groupNo: sch.GroupNo,
+          count: slots.length
+        },
+        slots
+      });
+    }
+
+    res.json({ meta: { courseId, groupsCount: groups.length }, groups });
 
   } catch(err) {
     console.error("TLC getSchedulesByCourse error:", err);
