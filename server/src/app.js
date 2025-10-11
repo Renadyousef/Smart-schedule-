@@ -24,7 +24,7 @@ import notificationsRouter from "./routes/notificationsRoutes.js";
 import notificationsRoutes from "./routes/notifications.routes.js";
 
 import stNotificationsRouter from "./routes/stNotifications.routes.js";
-
+import notifactionRouterSC from "./routes/notifactionRouterSC.js";
 const app = express();
 
 // If you serve frontend from Vite on 5173:
@@ -66,5 +66,6 @@ app.use('/Electives',Electives_on_sc)
 app.use("/Notifications", notificationsRouter);
 
 app.use("/api/notifications", notificationsRoutes);
+app.use("/NotificationsSC", notifactionRouterSC);
 
 export default app;

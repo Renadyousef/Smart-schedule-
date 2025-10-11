@@ -4,6 +4,7 @@ import ManageRules from "../ManageSchduling_rules/ManageRules";
 import TLCProfile from "../Profiles/TLCProfile"; // ✅ استيراد البروفايل
 
 import FixedSchedule from './ViewSchudles'
+import Landing from "./Landing";
 
 export default function HomePage({ onLogout }) {
   return (
@@ -13,7 +14,7 @@ export default function HomePage({ onLogout }) {
 
       <Routes>
         {/* الصفحة الرئيسية */}
-        <Route path="/" element={<h1>Welcome to the Home Page TLC</h1>} />
+        <Route path="/" element={<Landing />} />
 
         {/* صفحة القواعد */}
         <Route path="/Schudles" element={<FixedSchedule />} />

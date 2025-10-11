@@ -98,6 +98,40 @@ export const updatePreferences = async (req, res) => {
 
     await client.query("COMMIT");
 
+    // Try to create a broadcast notification for registrars (non-blocking)
+    try {
+      const message = `Student ${id} updated elective preferences (${preferences.length} courses)`;
+      const dataPayload = {
+        action: "student_preferences_updated",
+        studentId: Number(id),
+        preferencesCount: Array.isArray(preferences) ? preferences.length : 0,
+        reasons,
+        notes,
+        preview: (Array.isArray(preferences) ? preferences : []).slice(0, 5).map(p => ({
+          order: p?.order,
+          code: p?.code,
+          name: p?.name,
+        })),
+      };
+      await pool.query(
+        `insert into "Notifications"
+           ("Message","CreatedAt","CreatedBy","UserID","ReceiverID","Type","Entity","EntityId","Data","IsRead")
+         values ($1, now(), $2, $3, $4, $5, $6, $7, $8::jsonb, false)`,
+        [
+          message,
+          Number(id) || null, // CreatedBy
+          Number(id) || null, // UserID (safe if NOT NULL)
+          null,               // ReceiverID broadcast to registrars
+          "StudentPreferencesUpdated",
+          "StudentPreferences",
+          histRes.rows[0]?.id ?? null,
+          JSON.stringify(dataPayload),
+        ]
+      );
+    } catch (notifyErr) {
+      console.warn("[students.updatePreferences] notification insert failed:", notifyErr?.message);
+    }
+
     return res.json({
       ...upRes.rows[0],
       history_id: histRes.rows[0].id,

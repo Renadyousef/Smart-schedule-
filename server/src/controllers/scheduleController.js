@@ -2,6 +2,8 @@
 import pool from "../../DataBase_config/DB_config.js";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
+import { createTLCShareNotification } from "./notifactionControllerSC.js";
+
 
 function resolveUserId(req) {
   let userId =
@@ -1036,18 +1038,55 @@ export const listAllSlotsForGrid = async (req, res) => {
 };
 
 export const shareSchedule = async (req, res) => {
+  const client = await pool.connect();
   try {
     const { scheduleId } = req.params;
-    await pool.query(
+    await client.query("BEGIN");
+
+    // 1) Update status
+    await client.query(
       `UPDATE "Schedule" SET "Status"='shared' WHERE "ScheduleID"=$1`,
       [scheduleId]
     );
+
+    // 2) Read level/group for payload
+    const scInfo = await client.query(
+      `SELECT "Level","GroupNo" FROM "Schedule" WHERE "ScheduleID"=$1`,
+      [scheduleId]
+    );
+    const level = scInfo.rows[0]?.Level ?? null;
+    const groupNo = scInfo.rows[0]?.GroupNo ?? null;
+
+    // 3) Who triggered it
+    const createdBy =
+      req.user?.id ??
+      req.user?.UserID ??
+      req.user?.userId ??
+      req.user?.sub ??
+      null;
+
+    // 4) TLC landing notification
+    await createTLCShareNotification({
+      client,
+      scheduleId: Number(scheduleId),
+      createdBy: Number.isFinite(Number(createdBy)) ? Number(createdBy) : null,
+      level,
+      groupNo,
+      message: "Schedule shared with TLC — visible on landing.",
+    });
+
+    await client.query("COMMIT");
     res.json({ msg: "Schedule shared with TLC" });
   } catch (e) {
+    try { await client.query("ROLLBACK"); } catch {}
     console.error("shareSchedule:", e);
     res.status(500).json({ msg: "Failed to share schedule", error: e.message });
+  } finally {
+    client.release();
   }
 };
+
+
 
 export const approveSchedule = async (req, res) => {
   try {
