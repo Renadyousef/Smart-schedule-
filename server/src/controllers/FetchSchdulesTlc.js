@@ -26,14 +26,14 @@ function normalizeType(type, courseName) {
 }
 
 /**
- * Fetch all approved schedules for a level (multiple groups) - TLC with colors
+ * Fetch all approved schedules for a level (multiple groups)
  */
 export const getSchedulesByLevel = async (req, res) => {
   try {
     const level = Number(req.query.level);
     if (!Number.isInteger(level)) return res.status(400).json({ error: "level must be integer" });
 
-    const statusFilter = "approved";//change here after all logic done
+    const statusFilter = "approved";
     const sqlSchedules = `
       SELECT "ScheduleID","Level","GroupNo","Status"
       FROM "Schedule"
@@ -63,7 +63,7 @@ export const getSchedulesByLevel = async (req, res) => {
         day: normDay(r.day),
         start: toHM(r.start),
         end: toHM(r.end),
-        course_type: normalizeType(r.course_type, r.course_name), // this gives colors
+        course_type: normalizeType(r.course_type, r.course_name),
       }));
 
       groups.push({
@@ -87,37 +87,39 @@ export const getSchedulesByLevel = async (req, res) => {
 };
 
 /**
- * Fetch schedules by course - TLC with course_type for colors
+ * Fetch schedules by course
  */
 export const getSchedulesByCourse = async (req, res) => {
   try {
     const courseId = Number(req.query.courseId);
-    if (!Number.isInteger(courseId)) return res.status(400).json({ error: "courseId must be integer" });
+    if (!Number.isInteger(courseId))
+      return res.status(400).json({ error: "courseId must be integer" });
 
-    // 1. Get all schedules that contain this course
+    const statusFilter = "approved";
+
+    // ✅ Select distinct schedules only
     const sqlSchedules = `
-      SELECT sch."ScheduleID", sch."Level", sch."GroupNo", sch."Status"
+      SELECT DISTINCT sch."ScheduleID", sch."Level", sch."GroupNo", sch."Status"
       FROM "Schedule" sch
       JOIN "ScheduleSlot" sl ON sl."ScheduleID" = sch."ScheduleID"
-      WHERE sl."CourseID" = $1 AND LOWER(sch."Status")='shared'
+      WHERE sl."CourseID" = $1 AND LOWER(sch."Status") = $2
       ORDER BY sch."Level", sch."GroupNo", sch."ScheduleID";
     `;
-    const { rows: schedules } = await pool.query(sqlSchedules, [courseId]);
+    const { rows: schedules } = await pool.query(sqlSchedules, [courseId, statusFilter]);
     if (!schedules.length) return res.json({ meta:{courseId, groupsCount:0}, groups: [] });
 
     const groups = [];
     for (const sch of schedules) {
-      // 2. Get slots only for this course
       const slotsSql = `
         SELECT s."SlotID", sec."SectionID", c.is_external, c.course_code, c.course_name, c.course_type,
                COALESCE(sec."SectionNumber",1) AS section_number,
                COALESCE(sec."Capacity",30) AS capacity,
                s."DayOfWeek" AS day, s."StartTime" AS start, s."EndTime" AS end,
-               s."Room"
+               sec."Room" AS room
         FROM "ScheduleSlot" s
-        JOIN courses c ON c."CourseID"=s."CourseID"
-        LEFT JOIN "Sections" sec ON sec."SlotID"=s."SlotID"
-        WHERE s."ScheduleID"=$1 AND s."CourseID"=$2
+        JOIN courses c ON c."CourseID" = s."CourseID"
+        LEFT JOIN "Sections" sec ON sec."SlotID" = s."SlotID"
+        WHERE s."ScheduleID" = $1 AND s."CourseID" = $2
         ORDER BY s."DayOfWeek", s."StartTime"
       `;
       const { rows: slotsRaw } = await pool.query(slotsSql, [sch.ScheduleID, courseId]);
@@ -127,10 +129,7 @@ export const getSchedulesByCourse = async (req, res) => {
         day: r.day?.trim() || null,
         start: r.start?.toString().slice(0,5) || null,
         end: r.end?.toString().slice(0,5) || null,
-        course_type: (r.course_type || "").toLowerCase() === "tutorial" ? "tutorial" :
-                     (r.course_type || "").toLowerCase() === "lab" || (r.course_type || "").toLowerCase() === "laboratory" ? "lab" :
-                     (r.course_type || "").toLowerCase() === "elective" || (r.course_type || "").toLowerCase() === "optional" ? "elective" :
-                     "core"
+        course_type: normalizeType(r.course_type, r.course_name),
       }));
 
       groups.push({
