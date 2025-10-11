@@ -90,6 +90,8 @@ echo "JWT_SECRET=your_super_secret_key_here"
 echo "OPENAI_API_KEY=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" 
 
 # 5. Run the server
+# Note: By default, the server runs on port 5000. 
+# If port 5000 is already in use, you may need to free it or change the port in the server configuration and calls.
 cd server
 npm run dev
 
