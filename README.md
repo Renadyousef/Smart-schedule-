@@ -4,11 +4,12 @@
 - [Project Overview](#project-overview)
 - [Technologies Used](#technologies-used)
 - [Prerequisites](#prerequisites)
+- [License](#license)
 - [Installation and Setup](#installation-and-setup)
 - [Environment Variables](#environment-variables)
 - [Running the Project](#running-the-project)
-- [Folder Structure](#folder-structure)
-- [License](#license)
+
+
 
 ---
 
@@ -42,6 +43,11 @@ Please download the compatible versions for your device:
 
 ---
 
+## License
+
+This project is licensed under the **MIT License** — see the [LICENSE](./LICENSE) file for details.
+
+
 ## Installation and Setup
 
 Follow these steps to get the project running on your local machine:
@@ -73,3 +79,4 @@ npm run dev
 # 6. Run the client
 cd ../client
 npm run dev
+
