@@ -112,7 +112,8 @@ npm install
 # Note: JWT_SECRET will be changed at deployment for security purposes
 JWT_SECRET=your_super_secret_key_here
 OPENAI_API_KEY=Your_open_ai_key
-# we can't commit this to GitHub, OpenAI disables committed keys for their security purposes; this only affects the generate schedule feature in your run; however, you can simply generate your own open api key or skip the generate schedule feature for now**
+# we can't commit this to GitHub, OpenAI disables committed keys for their security purposes; this only affects
+# the generate schedule feature in your run; however, you can simply generate your own open api key or skip the generate schedule feature for now**
 
 # 5. Run the server
 # Note: By default, the server runs on port 5000. 
