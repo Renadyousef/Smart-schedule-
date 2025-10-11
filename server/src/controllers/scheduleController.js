@@ -1,4 +1,4 @@
-// server/controllers/scheduleController.js
+// server/controllers/scheduleController.jss
 import pool from "../../DataBase_config/DB_config.js";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";

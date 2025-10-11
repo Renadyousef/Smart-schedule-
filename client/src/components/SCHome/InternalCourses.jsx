@@ -182,7 +182,7 @@ export default function InternalCourses() {
             ))}
           </ul>
         ) : (
-          <div className="sc-empty">No internal courses found.</div>
+          <div className="sc-empty">No internal courses found</div>
         )}
       </div>
     </Container>
