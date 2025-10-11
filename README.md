@@ -6,8 +6,7 @@
 - [Prerequisites](#prerequisites)
 - [License](#license)
 - [Installation and Setup](#installation-and-setup)
-- [Environment Variables](#environment-variables)
-- [Running the Project](#running-the-project)
+
 
 
 
