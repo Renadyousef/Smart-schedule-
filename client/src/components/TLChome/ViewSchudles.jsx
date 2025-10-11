@@ -44,7 +44,6 @@ export default function ViewSchedules() {
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
 
-  // Fetch all courses
   useEffect(() => {
     axios
       .get("http://localhost:5000/Schudles/cources")
@@ -55,7 +54,6 @@ export default function ViewSchedules() {
       });
   }, []);
 
-  // Reset the other filter when one changes
   useEffect(() => {
     if (courseFilter) setLevelFilter("");
   }, [courseFilter]);
@@ -64,7 +62,6 @@ export default function ViewSchedules() {
     if (levelFilter) setCourseFilter("");
   }, [levelFilter]);
 
-  // Fetch schedules
   useEffect(() => {
     if (!levelFilter && !courseFilter) {
       setGroupsData([]);
@@ -92,77 +89,69 @@ export default function ViewSchedules() {
         setActiveGroup(null);
       });
   }, [levelFilter, courseFilter]);
-//approve schudle by id
- const approveSchedule = async () => {
-  if (!groupsData.length || !activeGroup) return;
 
-  const group = groupsData.find(g => (g.meta?.groupNo || 1) === activeGroup);
-  if (!group) return;
+  const approveSchedule = async () => {
+    if (!groupsData.length || !activeGroup) return;
 
-  const scheduleId = group.scheduleId; // <-- this is what backend needs
+    const group = groupsData.find((g) => (g.meta?.groupNo || 1) === activeGroup);
+    if (!group) return;
 
-  setApproving(true);
-  try {
-    const token = localStorage.getItem("token"); // or wherever you store JWT
-    const res = await axios.patch(
-      `http://localhost:5000/Schudles/approve/${scheduleId}`,
-      {},
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    alert(res.data.message);
+    const scheduleId = group.scheduleId;
+    setApproving(true);
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.patch(
+        `http://localhost:5000/Schudles/approve/${scheduleId}`,
+        {},
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert(res.data.message);
+      if (levelFilter) setLevelFilter(levelFilter);
+      else if (courseFilter) setCourseFilter(courseFilter);
+    } catch (err) {
+      console.error("Error approving schedule:", err);
+      alert("Failed to approve schedule");
+    } finally {
+      setApproving(false);
+    }
+  };
 
-    // Optionally, refresh the schedule list after approval
-    if (levelFilter) setLevelFilter(levelFilter); // triggers useEffect
-    else if (courseFilter) setCourseFilter(courseFilter);
-  } catch (err) {
-    console.error("Error approving schedule:", err);
-    alert("Failed to approve schedule");
-  } finally {
-    setApproving(false);
-  }
-};
+  const submitFeedback = async () => {
+    if (!comment.trim() || !groupsData.length || !activeGroup) return;
+    setSubmitting(true);
 
-//sending feedback to router in here 
-const submitFeedback = async () => {
-  if (!comment.trim() || !groupsData.length || !activeGroup) return;
-  setSubmitting(true);
+    const group = groupsData.find((g) => (g.meta?.groupNo || 1) === activeGroup);
+    if (!group) {
+      alert("No active schedule selected");
+      setSubmitting(false);
+      return;
+    }
 
-  // Get the currently active group's scheduleId
-  const group = groupsData.find(g => (g.meta?.groupNo || 1) === activeGroup);
-  if (!group) {
-    alert("No active schedule selected");
-    setSubmitting(false);
-    return;
-  }
-  const scheduleId = group.scheduleId;
-
-  try {
-    const token = localStorage.getItem("token"); 
-    const res = await axios.post(
-      "http://localhost:5000/Schudles/feedback",
-      { comment, scheduleId }, // <-- send scheduleId here
-      { headers: { Authorization: `Bearer ${token}` } } 
-    );
-
-    alert(res.data.message || "Feedback submitted successfully!");
-    setShowModal(false);
-    setComment("");
-  } catch (err) {
-    console.error("Error submitting feedback:", err);
-    alert("Failed to submit feedback");
-  } finally {
-    setSubmitting(false);
-  }
-};
-
-
+    const scheduleId = group.scheduleId;
+    try {
+      const token = localStorage.getItem("token");
+      const res = await axios.post(
+        "http://localhost:5000/Schudles/feedback",
+        { comment, scheduleId },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      alert(res.data.message || "Feedback submitted successfully!");
+      setShowModal(false);
+      setComment("");
+    } catch (err) {
+      console.error("Error submitting feedback:", err);
+      alert("Failed to submit feedback");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div className="container my-4">
       <style>{`
         .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; margin-bottom:40px;}
         th, td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden; }
-        .subject-box { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; font-size:.9rem; }
+        .subject-box { width:100%; height:auto; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; font-size:.9rem; white-space:normal; word-break:break-word; overflow:visible; text-align:center; padding:4px;}
         .room { font-size:.75rem; color:#333; }
         .btn-feedback { background-color:#e9f2ff; border:none; border-radius:30px; padding:14px 40px; font-weight:700; font-size:1.05rem; color:#0b3a67; }
         .btn-feedback:hover { background-color:#cce5ff; }
@@ -173,7 +162,7 @@ const submitFeedback = async () => {
         .legend-color { width:20px; height:20px; border-radius:6px; border:1px solid #bbb; }
       `}</style>
 
-      {/* Filters + Approve */}
+      {/* Filters */}
       <div className="d-flex gap-3 mb-3 flex-wrap align-items-center">
         <div>
           <label className="fw-bold mb-0">Level:</label>
@@ -185,7 +174,9 @@ const submitFeedback = async () => {
           >
             <option value="">Select Level</option>
             {[1, 2, 3, 4, 5, 6, 7, 8].map((lv) => (
-              <option key={lv} value={lv}>{lv}</option>
+              <option key={lv} value={lv}>
+                {lv}
+              </option>
             ))}
           </select>
         </div>
@@ -196,7 +187,7 @@ const submitFeedback = async () => {
             className="form-select"
             style={{ maxWidth: "200px" }}
             value={courseFilter}
-            onChange={(e) => setCourseFilter(Number(e.target.value) || "")} // <--- FIX applied
+            onChange={(e) => setCourseFilter(Number(e.target.value) || "")}
           >
             <option value="">Select Course</option>
             {courses.map((c) => (
@@ -218,18 +209,39 @@ const submitFeedback = async () => {
         </div>
       </div>
 
+      {/* Conditional messages */}
+      {!levelFilter && !courseFilter && (
+        <div className="alert alert-info text-center fw-semibold">
+          Please select a filter to view schedules.
+        </div>
+      )}
+      {courseFilter && (
+        <div className="alert alert-warning text-center fw-semibold">
+          Approvals are based on levels, not individual courses.
+        </div>
+      )}
+      {(levelFilter || courseFilter) && groupsData.length === 0 && (
+        <div className="alert alert-secondary text-center fw-semibold">
+          Please wait for the Scheduling Committee to share the schedule.
+        </div>
+      )}
+
       {/* Group Tabs */}
-      <div className="tabs">
-        {groupsData.map((g) => (
-          <button
-            key={g.meta?.groupNo || 1}
-            className={`tab-btn ${activeGroup === (g.meta?.groupNo || 1) ? "active" : ""}`}
-            onClick={() => setActiveGroup(g.meta?.groupNo || 1)}
-          >
-            Group {g.meta?.groupNo || 1}
-          </button>
-        ))}
-      </div>
+      {groupsData.length > 0 && (
+        <div className="tabs">
+          {groupsData.map((g) => (
+            <button
+              key={g.meta?.groupNo || 1}
+              className={`tab-btn ${
+                activeGroup === (g.meta?.groupNo || 1) ? "active" : ""
+              }`}
+              onClick={() => setActiveGroup(g.meta?.groupNo || 1)}
+            >
+              Group {g.meta?.groupNo || 1}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Schedule Table */}
       {groupsData
@@ -253,16 +265,25 @@ const submitFeedback = async () => {
             <table className="table-fixed" key={group.meta?.groupNo || 1}>
               <thead>
                 <tr>
-                  <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
+                  <th
+                    style={{ width: "140px", backgroundColor: "#f1f3f5" }}
+                  >
+                    Time
+                  </th>
                   {DAYS.map((d) => (
-                    <th key={d} style={{ backgroundColor: "#f1f3f5" }}>{d}</th>
+                    <th key={d} style={{ backgroundColor: "#f1f3f5" }}>
+                      {d}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
                 {TIMES.map((time, ti) => (
                   <tr key={time}>
-                    <td className="fw-bold" style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}>
+                    <td
+                      className="fw-bold"
+                      style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}
+                    >
                       {time}
                     </td>
                     {DAYS.map((day) => {
@@ -270,16 +291,17 @@ const submitFeedback = async () => {
                       if (skip[key]) return null;
                       const slot = grid?.[day]?.[time];
                       if (!slot) return <td key={day}></td>;
-
                       const bg = colorOf(slot.type);
                       const rowSpan = Math.max(1, slot.duration || 1);
-                      for (let k = 1; k < rowSpan; k++) {
+                      for (let k = 1; k < rowSpan; k++)
                         skip[`${day}#${ti + k}`] = true;
-                      }
 
                       return (
                         <td key={day} rowSpan={rowSpan}>
-                          <div className="subject-box" style={{ backgroundColor: bg }}>
+                          <div
+                            className="subject-box text-wrap"
+                            style={{ backgroundColor: bg }}
+                          >
                             {slot.subject}
                             <div className="room">Room {slot.room}</div>
                           </div>
@@ -293,66 +315,118 @@ const submitFeedback = async () => {
           );
         })}
 
-      {/* Legend */}
-      <div className="d-flex justify-content-center align-items-center flex-wrap gap-3 mt-2 mb-4">
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div>Core / Lecture</div>
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.tutorial }}></div>Tutorial</div>
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div>Lab</div>
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.elective }}></div>Elective</div>
-      </div>
-
-      {/* Feedback Modal */}
-      <div className="text-center mt-3">
-        <button className="btn-feedback" onClick={() => setShowModal(true)}>
-          Give Feedback
-        </button>
-      </div>
-      {showModal && (
-        <div className="modal fade show" style={{ display: "block", background: "rgba(0,0,0,.35)" }}>
-          <div className="modal-dialog modal-dialog-centered">
-            <div className="modal-content" style={{ borderRadius: "20px" }}>
-              <div className="modal-header" style={{ background: "#e9f2ff", color: "#0b3a67", borderTopLeftRadius: "20px", borderTopRightRadius: "20px" }}>
-                <h5 className="modal-title">Feedback</h5>
-                <button type="button" className="btn-close" onClick={() => setShowModal(false)}></button>
-              </div>
-              <div className="modal-body">
-                <textarea
-                  className="form-control"
-                  rows={4}
-                  placeholder="Your feedback…"
-                  value={comment}
-                  onChange={(e) => setComment(e.target.value)}
-                />
-              </div>
-              <div className="modal-footer d-flex gap-2">
-                <button
-                  className="btn btn-outline-secondary"
-                  style={{ borderRadius: "12px", padding: "8px 18px", fontWeight: "600" }}
-                  onClick={() => setShowModal(false)}
-                  disabled={submitting}
-                >
-                  Cancel
-                </button>
-                <button
-                  className="btn"
-                  style={{
-                    backgroundColor: "#e9f2ff",
-                    color: "#0b3a67",
-                    borderRadius: "12px",
-                    padding: "8px 18px",
-                    fontWeight: "600",
-                    border: "none",
-                    opacity: submitting || !comment.trim() ? 0.7 : 1,
-                  }}
-                  onClick={submitFeedback}
-                  disabled={submitting || !comment.trim()}
-                >
-                  {submitting ? "Submitting…" : "Submit"}
-                </button>
-              </div>
+      {/* ✅ Conditionally render Legend + Feedback only when a schedule is shown */}
+      {groupsData.length > 0 && (
+        <>
+          {/* Legend */}
+          <div className="d-flex justify-content-center align-items-center flex-wrap gap-3 mt-2 mb-4">
+            <div className="legend-box">
+              <div
+                className="legend-color"
+                style={{ backgroundColor: PALETTE.core }}
+              ></div>
+              Core / Lecture
+            </div>
+            <div className="legend-box">
+              <div
+                className="legend-color"
+                style={{ backgroundColor: PALETTE.tutorial }}
+              ></div>
+              Tutorial
+            </div>
+            <div className="legend-box">
+              <div
+                className="legend-color"
+                style={{ backgroundColor: PALETTE.lab }}
+              ></div>
+              Lab
+            </div>
+            <div className="legend-box">
+              <div
+                className="legend-color"
+                style={{ backgroundColor: PALETTE.elective }}
+              ></div>
+              Elective
             </div>
           </div>
-        </div>
+
+          {/* Feedback */}
+          <div className="text-center mt-3">
+            <button className="btn-feedback" onClick={() => setShowModal(true)}>
+              Give Feedback
+            </button>
+          </div>
+
+          {showModal && (
+            <div
+              className="modal fade show"
+              style={{ display: "block", background: "rgba(0,0,0,.35)" }}
+            >
+              <div className="modal-dialog modal-dialog-centered">
+                <div
+                  className="modal-content"
+                  style={{ borderRadius: "20px" }}
+                >
+                  <div
+                    className="modal-header"
+                    style={{
+                      background: "#e9f2ff",
+                      color: "#0b3a67",
+                      borderTopLeftRadius: "20px",
+                      borderTopRightRadius: "20px",
+                    }}
+                  >
+                    <h5 className="modal-title">Feedback</h5>
+                    <button
+                      type="button"
+                      className="btn-close"
+                      onClick={() => setShowModal(false)}
+                    ></button>
+                  </div>
+                  <div className="modal-body">
+                    <textarea
+                      className="form-control"
+                      rows={4}
+                      placeholder="Your feedback…"
+                      value={comment}
+                      onChange={(e) => setComment(e.target.value)}
+                    />
+                  </div>
+                  <div className="modal-footer d-flex gap-2">
+                    <button
+                      className="btn btn-outline-secondary"
+                      style={{
+                        borderRadius: "12px",
+                        padding: "8px 18px",
+                        fontWeight: "600",
+                      }}
+                      onClick={() => setShowModal(false)}
+                      disabled={submitting}
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      className="btn"
+                      style={{
+                        backgroundColor: "#e9f2ff",
+                        color: "#0b3a67",
+                        borderRadius: "12px",
+                        padding: "8px 18px",
+                        fontWeight: "600",
+                        border: "none",
+                        opacity: submitting || !comment.trim() ? 0.7 : 1,
+                      }}
+                      onClick={submitFeedback}
+                      disabled={submitting || !comment.trim()}
+                    >
+                      {submitting ? "Submitting…" : "Submit"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   );
