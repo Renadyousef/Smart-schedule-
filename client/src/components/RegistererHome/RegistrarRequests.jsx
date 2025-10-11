@@ -316,9 +316,9 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
             <div className="mb-2">
               <label className="form-label">Response Type</label>
               <select className="form-select" value={mode} onChange={(e) => setMode(e.target.value)}>
-                <option value="auto">Auto (NeededFields)</option>
+                
                 <option value="irregular">Add Irregular Student</option>
-                <option value="custom">Custom JSON</option>
+                
               </select>
             </div>
 
