@@ -2,8 +2,7 @@
 import pool from "../../DataBase_config/DB_config.js";
 
 /* -------------------- shared helpers -------------------- */
-function handle500(res, label, err) {
-  console.error(label, err);
+function handle500(res, _label, err) {
   return res
     .status(500)
     .json({ error: "Server error", message: err?.message ?? null, detail: err?.detail ?? null });
@@ -170,7 +169,6 @@ export const getRegistrarRequest = async (req, res) => {
     );
     if (rq.rowCount === 0) return res.status(404).json({ error: "Not found" });
 
-    // Only students (no electives section here)
     const kids = await pool.query(
       `SELECT "CRStudentID" AS "crStudentId","StudentID" AS "studentId","StudentName" AS "studentName",
               "MatchStatus" AS "matchStatus","Status" AS status,"ResponseData" AS "responseData",
@@ -200,7 +198,6 @@ export const respondForStudent = async (req, res) => {
     const lineStatus = sanitizeLineStatus(status);
     await client.query("BEGIN");
 
-    // 1) save JSON + line status
     await client.query(
       `UPDATE public."CommitteeRequestStudents"
           SET "ResponseData" = COALESCE("ResponseData",'{}'::jsonb) || $1::jsonb,
@@ -210,7 +207,6 @@ export const respondForStudent = async (req, res) => {
       [JSON.stringify(data), lineStatus, crStudentId, id]
     );
 
-    // 2) irregular write-through (optional)
     if (isIrregularAction(data)) {
       const studentId = await resolveStudentId(client, { requestId: id, crStudentId, data });
       if (studentId) {
@@ -286,7 +282,6 @@ export const respondForStudent = async (req, res) => {
       }
     }
 
-    // 3) auto-close parent when no pending lines remain
     const agg = await client.query(
       `select
          count(*) filter (where "Status" = 'pending') as pending,
@@ -315,9 +310,7 @@ export const respondForStudent = async (req, res) => {
       );
     }
 
-    // 4) create notification for Scheduling Committee (optional)
     try {
-      // Try to infer receiver/creator if not provided
       let receiverId = bodyReceiverId ? Number(bodyReceiverId) : null;
       let createdById = bodyCreatedBy ? Number(bodyCreatedBy) : null;
 
@@ -351,8 +344,8 @@ export const respondForStudent = async (req, res) => {
           ]
         );
       }
-    } catch (notifyErr) {
-      console.warn("respondForStudent: notification insert skipped", notifyErr?.message);
+    } catch (_notifyErr) {
+      /* silent */
     }
 
     await client.query("COMMIT");
@@ -365,14 +358,18 @@ export const respondForStudent = async (req, res) => {
   }
 };
 
-/* ---------- update request status (approve/reject/etc.) ---------- */
-/** POST /registrarRequests/requests/:id/status  {status: 'fulfilled'|'rejected'|'pending'|'failed'} */
+/** POST /registrarRequests/requests/:id/status
+ *  Body: { status: 'fulfilled' | 'rejected' | 'pending' | 'failed' | 'approved' }
+ *//** POST /registrarRequests/requests/:id/status
+ *  Body: { status: 'fulfilled' | 'rejected' | 'pending' | 'failed' | 'approved' }
+ */
 export const updateRegistrarRequestStatus = async (req, res) => {
   try {
     const { id } = req.params;
-    const { status } = req.body || {};
+    const raw = String((req.body || {}).status || "").toLowerCase().trim();
+    const s = raw === "approved" ? "fulfilled" : raw;
+
     const allowed = new Set(["pending", "fulfilled", "rejected", "failed"]);
-    const s = String(status || "").toLowerCase();
     if (!allowed.has(s)) return res.status(400).json({ error: "Invalid status" });
 
     const r = await pool.query(
@@ -385,18 +382,21 @@ export const updateRegistrarRequestStatus = async (req, res) => {
     );
     if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
 
-    // Notify Scheduling Committee about the status change
+    // (1) إشعار داخلي للجنة
     try {
       const hdr = await pool.query(
-        `select "CommitteeID","RegistrarID","CreatedBy","Title" from public."CommitteeRequests" where "RequestID"=$1`,
+        `select "CommitteeID","RegistrarID","CreatedBy","Title"
+           from public."CommitteeRequests"
+          where "RequestID"=$1`,
         [id]
       );
       const receiverId = hdr.rows[0]?.CommitteeID ?? hdr.rows[0]?.CreatedBy ?? null;
       const createdById = hdr.rows[0]?.RegistrarID ?? null;
       const title = hdr.rows[0]?.Title || "Request";
+
       if (receiverId) {
         await pool.query(
-          `INSERT INTO "Notifications"
+          `INSERT INTO public."Notifications"
             ("ReceiverID","CreatedBy","Message","Type","Entity","EntityId","Data")
            VALUES ($1,$2,$3,$4,$5,$6,$7)`,
           [
@@ -410,8 +410,35 @@ export const updateRegistrarRequestStatus = async (req, res) => {
           ]
         );
       }
-    } catch (notifyErr) {
-      console.warn("updateRegistrarRequestStatus: notification insert skipped", notifyErr?.message);
+    } catch (_notifyErr) {
+      /* silent */
+    }
+
+    // (2) إشعار عام respond_request
+    try {
+      const publicMsg = s === "rejected" ? "rejected" : (s === "fulfilled" ? "approved" : null);
+
+      if (publicMsg) {
+        const hdr2 = await pool.query(
+          `select "RegistrarID" from public."CommitteeRequests" where "RequestID"=$1`,
+          [id]
+        );
+        const createdByForPublic = hdr2.rows[0]?.RegistrarID ?? 1;
+
+        await pool.query(
+          `INSERT INTO public."Notifications"
+            ("Title","Message","ReceiverID","Type","Entity","EntityId","Data","CreatedBy","IsRead")
+           VALUES ($1, $2, NULL, $3, NULL, NULL, NULL, $4, FALSE)`,
+          [
+            "respond request",
+            `${publicMsg} (#${id})`, // ✅ أضفنا رقم الطلب مع النص
+            "respond_request",
+            createdByForPublic
+          ]
+        );
+      }
+    } catch (_publicNotifyErr) {
+      /* silent */
     }
 
     return res.json({ ok: true });
