@@ -23,35 +23,9 @@ export const submitFeedback = async (req, res) => {
     const feedbackResult = await pool.query(feedbackQuery, [comment, scheduleId, userId]);
     const feedback = feedbackResult.rows[0];
 
-    // Fetch schedule info
-    const scheduleResult = await pool.query(
-      `SELECT "Level", "GroupNo" FROM "Schedule" WHERE "ScheduleID" = $1`,
-      [scheduleId]
-    );
-    const schedule = scheduleResult.rows[0];
-    const scheduleInfo = schedule
-      ? `Level ${schedule.Level} - Group ${schedule.GroupNo}`
-      : `Schedule #${scheduleId}`;
-
-    // Insert notification
-    const notificationMessage = `New TLC feedback for Schedule of ${scheduleInfo}: ${comment}`;
-    const notificationQuery = `
-      INSERT INTO "Notifications" ("Message", "CreatedAt", "CreatedBy", "Type", "IsRead")
-      VALUES ($1, NOW(), $2, $3, false)
-      RETURNING *;
-    `;
-    const notificationResult = await pool.query(notificationQuery, [
-      notificationMessage,
-      userId,                 // CreatedBy
-      "tlc_schedule_feedback" // Type
-    ]);
-    const notification = notificationResult.rows[0];
-    console.log("Notification inserted:", notification);
-
     res.status(201).json({
       message: "Feedback submitted successfully",
-      feedback,
-      notification
+      feedback
     });
 
   } catch (err) {
