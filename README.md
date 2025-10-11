@@ -5,6 +5,7 @@
 - [Technologies Used](#technologies-used)
 - [Prerequisites](#prerequisites)
 - [License](#license)
+- [Demo Credentials](#demo-credentials)
 - [Installation and Setup](#installation-and-setup)
 
 
@@ -64,6 +65,29 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE 
 SOFTWARE.
 
+## Demo Credentials
+
+For convenience, you can use the following accounts to explore the system:
+
+### Teaching Load Committee (TLC)
+- **Email:** renad1@ksu.edu.sa
+- **Password:** Ela@911911
+
+### Scheduling Committee (SC)
+- **Email:** R3@ksu.edu.sa
+- **Password:** Rruba1234@
+
+### Student
+- **Email:** R@student.ksu.edu.sa  
+- **Password:** Theoriginals1@
+
+ ### Registrar
+- **Email:** renad2@ksu.edu.sa
+-  **Password:** Ela@911911
+
+
+> Alternatively, you can sign up for a new account via the registration page.  
+> Note: Demo accounts have full access to their respective role features.
 
 ## Installation and Setup
 
