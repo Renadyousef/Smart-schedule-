@@ -2,10 +2,9 @@
 import pool from "../../DataBase_config/DB_config.js"; 
 
 export const submitFeedback = async (req, res) => {
-  const client = await pool.connect();
   try {
     const { comment, scheduleId } = req.body;
-    const userId = req.user?.id; // logged-in user ID
+    const userId = req.user?.id;
 
     if (!comment || !scheduleId) {
       return res.status(400).json({ error: "Comment and ScheduleID are required" });
@@ -15,56 +14,48 @@ export const submitFeedback = async (req, res) => {
       return res.status(401).json({ error: "Unauthorized: user not found" });
     }
 
-    await client.query("BEGIN");
-
-    // Insert feedback, btw we didnt inser usr id inseter its value from above 
+    // Insert feedback
     const feedbackQuery = `
-      INSERT INTO "Feedback" ("Comment", "ScheduleID", "CreatedAt","UserID")
-      VALUES ($1, $2, NOW(),$3)
+      INSERT INTO "Feedback" ("Comment", "ScheduleID", "CreatedAt", "UserID")
+      VALUES ($1, $2, NOW(), $3)
       RETURNING *;
     `;
-    const feedbackResult = await client.query(feedbackQuery, [comment, scheduleId,userId]);
+    const feedbackResult = await pool.query(feedbackQuery, [comment, scheduleId, userId]);
     const feedback = feedbackResult.rows[0];
 
-    // Fetch schedule info to include in notification
-    const scheduleQuery = `
-      SELECT "Level", "GroupNo" 
-      FROM "Schedule" 
-      WHERE "ScheduleID" = $1
-    `;
-    const scheduleResult = await client.query(scheduleQuery, [scheduleId]);
+    // Fetch schedule info
+    const scheduleResult = await pool.query(
+      `SELECT "Level", "GroupNo" FROM "Schedule" WHERE "ScheduleID" = $1`,
+      [scheduleId]
+    );
     const schedule = scheduleResult.rows[0];
-
     const scheduleInfo = schedule
       ? `Level ${schedule.Level} - Group ${schedule.GroupNo}`
       : `Schedule #${scheduleId}`;
 
     // Insert notification
-    const notificationMessage = `New TLC feedback for ${scheduleInfo}: ${comment}`;
+    const notificationMessage = `New TLC feedback for Schedule of ${scheduleInfo}: ${comment}`;
     const notificationQuery = `
       INSERT INTO "Notifications" ("Message", "CreatedAt", "CreatedBy", "Type", "IsRead")
       VALUES ($1, NOW(), $2, $3, false)
       RETURNING *;
     `;
-    const notificationResult = await client.query(notificationQuery, [
+    const notificationResult = await pool.query(notificationQuery, [
       notificationMessage,
-      userId,
-      "tlc_schedule_feedback",
+      userId,                // CreatedBy
+      "tlc_schedule_feedback" // Type
     ]);
     const notification = notificationResult.rows[0];
-
-    await client.query("COMMIT");
+    console.log("Notification inserted:", notification);
 
     res.status(201).json({
-      message: "Feedback submitted  successfully",
+      message: "Feedback submitted successfully",
       feedback,
-      notification,
+      notification
     });
+
   } catch (err) {
-    await client.query("ROLLBACK");
-    console.error("Error saving feedback and notification:", err);
+    console.error("Error saving feedback:", err);
     res.status(500).json({ error: "Failed to submit feedback" });
-  } finally {
-    client.release();
   }
 };
