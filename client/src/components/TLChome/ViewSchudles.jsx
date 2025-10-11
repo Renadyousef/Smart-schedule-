@@ -202,7 +202,7 @@ export default function ViewSchedules() {
           <button
             className="btn btn-success"
             onClick={approveSchedule}
-            disabled={approving || (!levelFilter && !courseFilter)}
+            disabled={approving || !levelFilter }
           >
             {approving ? "Approving..." : "Approve Schedule"}
           </button>
