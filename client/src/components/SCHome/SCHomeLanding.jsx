@@ -169,16 +169,16 @@ function StudentNotificationsPanel() {
 
           <div className="col-12 col-sm-6 col-md-4 col-lg-3">
             <select
-              value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value)}
-              className="form-select"
-            >
-              <option value="all">All types</option>
-              <option value="schedule_feedback_student">Schedule feedback (student)</option>
-              {/* ✅ طابقت القيمة مع الباك/القاعدة */}
-              <option value="tlc_schedule_feedback">Schedule feedback (TLC)</option>
-              <option value="new_request">New request</option>
-            </select>
+  value={typeFilter}
+  onChange={(e) => setTypeFilter(e.target.value)}
+  className="form-select"
+>
+  <option value="all">All types</option>
+  <option value="schedule_feedback_student">Schedule feedback (student)</option>
+  <option value="tlc_schedule_feedback">Schedule feedback (TLC)</option>
+  <option value="register_to_scheduler">Register Offer</option>
+</select>
+
           </div>
 
           <div className="col-12 col-sm-auto d-flex gap-2">
@@ -212,7 +212,8 @@ function StudentNotificationsPanel() {
             >
               <div className="me-3">
                 <div className="d-flex align-items-center gap-2">
-                  <strong>{n.Title || n.Type || "Notification"}</strong>
+            <strong>{n.TitleDisplay || "Notification"}</strong>
+
                   {!n.IsRead && <span className="badge bg-primary">New</span>}
                 </div>
 <div className="text-muted small mt-1">

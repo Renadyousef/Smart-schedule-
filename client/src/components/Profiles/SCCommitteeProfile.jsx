@@ -1,3 +1,4 @@
+// client/src/components/Profiles/SCCommitteeProfile.jsx
 import React from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
@@ -7,16 +8,8 @@ import axios from "axios";
 import SC_Header from "../SCHome/Header.jsx";
 import Footer from "../Footer/Footer.jsx";
 
-/**
- * SC Committee Profile (EN) — Avatar ثابت "SC"
- * ملاحظة: لا تغييرات على الديزاين. فقط حذف الهيدر/الفوتر افتراضيًا لتجنب التكرار
- * عند استخدامه داخل Router عندك Layout عام.
- */
-
 // Axios instance مع Authorization تلقائيًا
-const api = axios.create({
-  baseURL: "http://localhost:5000",
-});
+const api = axios.create({ baseURL: "http://localhost:5000" });
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
@@ -39,7 +32,7 @@ export default function SCCommitteeProfile({
   const [errors, setErrors] = React.useState({ name: "", email: "" });
   const [notice, setNotice] = React.useState("");
 
-  // جلب بيانات البروفايل عند التحميل
+  // جلب بيانات البروفايل (نفس منطق TLCProfile)
   React.useEffect(() => {
     async function fetchProfile() {
       try {
@@ -47,13 +40,20 @@ export default function SCCommitteeProfile({
         if (!stored?.id) throw new Error("No user in localStorage");
 
         const { data } = await api.get(`/api/profile/${stored.id}`);
+
+        // نبني الاسم الكامل من firstName/lastName إن وُجدوا، وإلا نستخدم data.name
+        const fullName =
+          [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
+          data.name ||
+          "SC Member";
+
         setUser({
-          name: data.name,
-          email: data.email,
-          role: data.role,
-          department: data?.department?.name || "",
+          name: fullName,
+          email: data.email || "sc@example.com",
+          role: data.role || "Scheduling Committee (SC)",
+          department: data?.department?.name || "Scheduling Committee",
         });
-        setForm({ name: data.name, email: data.email });
+        setForm({ name: fullName, email: data.email || "" });
       } catch (err) {
         console.error("Fetch profile failed:", err);
         setNotice("Failed to load profile.");
@@ -79,10 +79,11 @@ export default function SCCommitteeProfile({
   function onEdit() { setNotice(""); setIsEditing(true); }
   function onCancel() {
     setForm({ name: user.name, email: user.email });
-    setErrors({ name:"", email:"" });
+    setErrors({ name: "", email: "" });
     setNotice(""); setIsEditing(false);
   }
 
+  // الحفظ (نفس TLCProfile): نفصل الاسم إلى firstName/lastName ونرسل PUT
   async function onSave(e) {
     e?.preventDefault?.();
     setNotice("");
@@ -103,6 +104,8 @@ export default function SCCommitteeProfile({
 
       const updated = { ...user, name: form.name.trim(), email: form.email.trim() };
       setUser(updated);
+
+      // تحديث localStorage اختياري
       try {
         const ls = JSON.parse(localStorage.getItem("user") || "{}");
         localStorage.setItem("user", JSON.stringify({ ...ls, name: updated.name, email: updated.email }));
@@ -227,7 +230,7 @@ export default function SCCommitteeProfile({
       {/* نعرض الفوتر فقط لو انطلب */}
       {includeFooter && <Footer />}
 
-      {/* Styles (بدون تغيير بصري، بس أضفت كلاس بسيط لتعويض عدم وجود الهيدر) */}
+      {/* Styles */}
       <style>{`
         :root{
           --page-bg:#f3f5f8;
@@ -247,7 +250,6 @@ export default function SCCommitteeProfile({
         .area-constrained{ width:min(var(--maxw),100%); margin-inline:auto; padding-inline:clamp(12px,2vw,24px); }
         .backdrop-wrap{ backdrop-filter:saturate(120%) blur(8px); background:rgba(255,255,255,.65); border-bottom:1px solid rgba(148,163,184,.2); z-index:1030; }
         .hero{ position:relative; padding-top:clamp(56px,7vh,72px); }
-        /* لما ما فيه Header محلي، أعطي بَدنج بسيطة فوق عشان الشكل يبقى نفسه */
         .hero-top-pad{ padding-top:clamp(24px,5vh,40px); }
         .hero-inner{ display:flex; align-items:center; gap:clamp(16px,3vw,28px); padding-block:clamp(22px,3.5vh,34px); }
         .avatar-wrap{ position:relative; width:clamp(84px,14vw,120px); height:clamp(84px,14vw,120px); }
