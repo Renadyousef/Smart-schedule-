@@ -20,6 +20,31 @@ function pickArr(v) {
   return [];
 }
 
+// يستخرج UserID من localStorage أو من JWT
+function resolveCurrentUserId(token) {
+  // 1) من localStorage: user كـ JSON
+  try {
+    const u = safeParseJSON(localStorage.getItem("user")) || safeParseJSON(sessionStorage.getItem("user"));
+    const idFromObj = toInt(u?.UserID ?? u?.userId ?? u?.id);
+    if (idFromObj) return idFromObj;
+  } catch {}
+
+  // 2) من مفاتيح منفصلة
+  const idKey = toInt(localStorage.getItem("UserID") ?? sessionStorage.getItem("UserID"));
+  if (idKey) return idKey;
+
+  // 3) من الـJWT (claims: UserID | userId | sub)
+  if (token && token.split(".").length === 3) {
+    try {
+      const payload = JSON.parse(atob(token.split(".")[1]));
+      const cand = payload?.UserID ?? payload?.userId ?? payload?.sub;
+      const idFromJwt = toInt(cand);
+      if (idFromJwt) return idFromJwt;
+    } catch {}
+  }
+  return null;
+}
+
 function mapRow(r) {
   const data = safeParseJSON(r.Data ?? r.data) ?? {};
   return {
@@ -34,7 +59,7 @@ function mapRow(r) {
   };
 }
 
-/* ---------- title & message composers (like your registrar UI) ---------- */
+/* ---------- title & message composers ---------- */
 function defaultTitleFor(n) {
   const t = String(n?.type || "").toLowerCase();
   if (t.startsWith("tlc.schedule")) return "Schedule update";
@@ -53,8 +78,8 @@ function pickMeta(n) {
     action: d.action ?? null,
     front: d.front ?? null,
     subspace: d.subspace ?? null,
-    scheduleId: toInt(d.scheduleId),
-    groupNo: toInt(d.groupNo),
+    scheduleId: toInt(d.scheduleId ?? d.ScheduleID),
+    groupNo: toInt(d.groupNo ?? d.GroupNo),
   };
 }
 
@@ -88,11 +113,18 @@ function composeFullMessage(n) {
 
 /* ---------- component ---------- */
 export default function Landing() {
-  const token = localStorage.getItem("token") || sessionStorage.getItem("token") || "";
-  const auth = useMemo(
-    () => (token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
-    [token]
-  );
+  const token =
+    localStorage.getItem("token") ||
+    sessionStorage.getItem("token") ||
+    "";
+  const currentUserId = useMemo(() => resolveCurrentUserId(token), [token]);
+
+  const auth = useMemo(() => {
+    const headers = {};
+    if (token) headers.Authorization = `Bearer ${token}`;
+    if (currentUserId) headers["x-user-id"] = String(currentUserId); // المهم: نرسل هوية المستخدم
+    return { headers };
+  }, [token, currentUserId]);
 
   const [list, setList] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -103,26 +135,34 @@ export default function Landing() {
   const [unread, setUnread] = useState(0);
 
   const fetchUnread = useCallback(async () => {
+    if (!currentUserId) { setUnread(0); return; }
     try {
-      const r = await axios.get(`${API_BASE}/NotificationsSC/unread-count`, auth);
+      const r = await axios.get(`${API_BASE}/NotificationsSC/tlc/unread-count`, auth);
       setUnread(Number(r.data?.unread ?? 0));
-    } catch (e) {
-      // non-fatal
+    } catch {
       setUnread(0);
     }
-  }, [auth]);
+  }, [auth, currentUserId]);
 
   const load = useCallback(async () => {
     setLoading(true);
     setErr("");
     try {
-      const r = await axios.get(`${API_BASE}/NotificationsSC/view?limit=30`, auth);
-      if (r.data?.success) {
-        const rows = (r.data.notifications || []).map(mapRow);
-        setList(rows);
-      } else {
+      if (!currentUserId) {
+        setErr("Missing user id (x-user-id). Please sign in again.");
         setList([]);
-        setErr(`Bad API shape: ${JSON.stringify(r.data)}`);
+      } else {
+        const r = await axios.get(
+          `${API_BASE}/NotificationsSC/tlc`,
+          { ...auth, params: { limit: 30, offset: 0, unreadOnly: onlyUnread } }
+        );
+        if (r.data?.success) {
+          const rows = (r.data.notifications || []).map(mapRow);
+          setList(rows);
+        } else {
+          setList([]);
+          setErr(`Bad API shape: ${JSON.stringify(r.data)}`);
+        }
       }
     } catch (e) {
       const detail = e.response
@@ -134,15 +174,13 @@ export default function Landing() {
       setList([]);
     } finally {
       setLoading(false);
+      await fetchUnread();
     }
-    await fetchUnread();
-  }, [auth, fetchUnread]);
+  }, [auth, currentUserId, onlyUnread, fetchUnread]);
 
   useEffect(() => { load(); }, [load]);
 
-  const visible = list.filter((n) => (onlyUnread ? !n.is_read : true));
-  const unreadCount = list.filter((n) => !n.is_read).length;
-
+  const visible = list; // السيرفر صار يفلتر بـ unreadOnly، فما نعيد فلترة هنا
   const toggleSelect = (id) => {
     const copy = new Set(selectedIds);
     if (copy.has(id)) copy.delete(id); else copy.add(id);
@@ -151,24 +189,25 @@ export default function Landing() {
 
   const markSelectedRead = async () => {
     const ids = Array.from(selectedIds);
-    if (!ids.length) return;
+    if (!ids.length || !currentUserId) return;
     try {
       await axios.post(`${API_BASE}/NotificationsSC/mark-read`, { ids }, auth);
       setList((prev) => prev.map((n) => (selectedIds.has(n.id) ? { ...n, is_read: true } : n)));
       setSelectedIds(new Set());
       await fetchUnread();
-    } catch (e) {
+    } catch {
       setErr("Failed to mark selected as read.");
     }
   };
 
   const clearAll = async () => {
+    if (!currentUserId) return;
     try {
       await axios.post(`${API_BASE}/NotificationsSC/clear-all`, {}, auth);
       setList((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setSelectedIds(new Set());
       await fetchUnread();
-    } catch (e) {
+    } catch {
       setErr("Failed to clear all.");
     }
   };
