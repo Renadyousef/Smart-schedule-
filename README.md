@@ -102,10 +102,13 @@ code . to open it in VS Code
 # 2. Install dependencies for client
 cd client
 npm install
-
+npm install bootstrap
 # 3. Install dependencies for the server
 cd ../
 npm install
+#3.2 and OpenAI library
+cd server
+npm install openai
 
 # 4. Create a .env file in the root of the project
 # paste the following keys
