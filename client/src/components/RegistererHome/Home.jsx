@@ -116,7 +116,7 @@ function Dashboard() {
 
       {/* Notice */}
       <div className="alert alert-info mt-4">
-        Elective offerings close on <strong>Oct 10</strong>. Please submit before the deadline.
+        Elective offerings close on <strong>Oct 20</strong>. Please submit before the deadline.
       </div>
     </div>
   );
