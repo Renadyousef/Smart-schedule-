@@ -2,6 +2,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 
+/* لاحظ: الأيام هنا للعرض فقط. البيانات تُجلب من API، وما نفرض أيام/أنواع من عندنا. */
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
 const TIMES = [
   "08:00 - 08:50",
@@ -13,28 +14,39 @@ const TIMES = [
   "15:00 - 15:50",
 ];
 
+/* لوح الألوان: كل نوع له لون ثابت */
 const PALETTE = {
-  core: "#cce5ff",
-  tutorial: "#ffe0b2",
-  lab: "#e1bee7",
-  elective: "#fff9c4",
-  default: "#f8f9fa",
+  core: "#cce5ff",      // محاضرة (Core / Lecture)
+  tutorial: "#ffe0b2",  // تمارين (Tutorial)
+  lab: "#e1bee7",       // معمل (Lab)
+  elective: "#fff9c4",  // اختياري (Elective/Optional)
+  default: "#f8f9fa",   // افتراضي (احتياطي)
 };
 
+/* ✅ استثناءات: مواد نثبّت نوعها بغض النظر عن الحسابات */
+const COURSE_TYPE_OVERRIDES = {
+  SWE444: "core", // swe444 is lecture
+  // أضيفي مواد أخرى هنا إن لزم: "MATH101": "tutorial", ...
+};
+
+/* توحيد النص لأي نوع يجي من الداتا أو نتيجتنا المحلية */
 function normalizeType(type) {
   const t = String(type || "").toLowerCase();
   if (t === "tutorial") return "tutorial";
   if (t === "lab" || t === "laboratory") return "lab";
   if (t === "elective" || t === "optional") return "elective";
-  return "core";
+  return "core"; // أي شيء غير معروف نعتبره محاضرة (Core)
 }
+
+/* تحويل النوع إلى اللون الفعلي من PALETTE */
 function colorOf(type) {
   const nt = normalizeType(type);
-  if (nt === "tutorial") return PALETTE.tutorial;
-  if (nt === "lab") return PALETTE.lab;
-  if (nt === "elective") return PALETTE.elective;
-  return PALETTE.core;
+  if (nt === "tutorial") return PALETTE.tutorial; // تمارين → برتقالي فاتح
+  if (nt === "lab") return PALETTE.lab;           // معمل → بنفسجي فاتح
+  return PALETTE.core;                             // محاضرة (أو افتراضي) → أزرق فاتح
 }
+
+/* أدوات وقت */
 function titleCaseDay(dbDay) {
   if (!dbDay) return "";
   return dbDay.charAt(0).toUpperCase() + dbDay.slice(1).toLowerCase();
@@ -49,21 +61,13 @@ const SLOT_PARTS = TIMES.map((t) => {
 });
 const SLOT_STARTS = SLOT_PARTS.map((p) => p.s);
 
-/* ===== منطق تحديد النوع ===== */
+/* منطق INTERNAL: أيام (أحد/ثلاثاء/خميس) تُعتبر أيام محاضرات للمواد الداخلية */
 const INTERNAL_LECTURE_DAYS = new Set(["Sunday", "Tuesday", "Thursday"]);
-function inferTypeFromSlot(slot) {
-  const name = String(slot?.course_name || "").toLowerCase();
-  if (/lab|laborator/.test(name)) return "lab";
-  if (/tutorial/.test(name)) return "tutorial";
-  const isExternal = !!slot?.is_external;
-  if (!isExternal) {
-    const day = String(slot?.day || "").trim();
-    if (!INTERNAL_LECTURE_DAYS.has(day)) return "tutorial";
-  }
-  return "core";
-}
 
-/* ===== تحويل ردّ /grid-by-level إلى rows ===== */
+/* ----------------------------------------------------
+ * 1) تحويل ردّ /grid-by-level إلى rows (بدون تلوين هنا)
+ *    نأخذ البيانات كما هي، ونأجل تحديد النوع للألوان لاحقًا.
+ * --------------------------------------------------*/
 function groupsGridToRows(groups) {
   const rows = [];
   for (const g of groups || []) {
@@ -74,16 +78,22 @@ function groupsGridToRows(groups) {
     const groupNo = meta.groupNo ?? null;
 
     for (const s of g?.slots || []) {
-      const deducedType = inferTypeFromSlot(s);
       rows.push({
         ScheduleID: scheduleId,
         Level: level,
         Status: status,
         GroupNo: groupNo,
+
         course_code: s.course_code,
         course_name: s.course_name,
-        course_type: deducedType,
+
+        /* مهم: لا نحدد course_type هنا. سنحدد النوع لاحقًا اعتمادًا على رقم الشعبة/اليوم. */
+        course_type: null,
+
         SectionID: s.section_id,
+        section_number: s.section_number ?? null, // رقم الشعبة
+        is_external: !!s.is_external,             // خارجي/داخلي
+
         room: s.section_number ? String(s.section_number).padStart(3, "0") : "000",
         DayOfWeek: s.day,
         StartTime: s.start,
@@ -94,9 +104,44 @@ function groupsGridToRows(groups) {
   return rows;
 }
 
-/* ===== rows -> schedule grid ===== */
+/* ----------------------------------------------------
+ * 2) نبني خريطة "أصغر شعبة" لكل كورس (للـ External)
+ *    هذا الأساس الذي نقيس عليه الفرق لتحديد Tutorial/Lab.
+ * --------------------------------------------------*/
+function buildBaseSectionByCourse(rows) {
+  const base = {};
+  for (const r of rows || []) {
+    if (!r.is_external) continue;            // نطبّق هذا فقط على المواد الخارجية
+    if (!r.course_code) continue;
+    const n = Number(r.section_number);
+    if (!Number.isFinite(n)) continue;
+    // نخزن أصغر رقم شعبة مرّ علينا لهذا الكورس
+    base[r.course_code] =
+      base[r.course_code] === undefined ? n : Math.min(base[r.course_code], n);
+  }
+  return base;
+}
+
+/* ----------------------------------------------------
+ * 3) rows -> schedule grid + "تحديد النوع = يحدد اللون"
+ *    المنطق:
+ *    - External:
+ *        diff = (section_number - base_section_for_course)
+ *        diff = 0 ⇒ core (محاضرة)
+ *        diff = 1 ⇒ tutorial (تمارين)
+ *        diff ≥ 2 ⇒ lab (معمل)
+ *    - Internal:
+ *        الاسم فيه "lab" ⇒ lab
+ *        الاسم فيه "tutorial" ⇒ tutorial
+ *        غير كذا:
+ *          يوم (أحد/ثلاثاء/خميس) أو المدة خانتين ⇒ core
+ *          غيرها ⇒ tutorial
+ *
+ * --------------------------------------------------*/
 function rowsToSchedule(rows) {
   const out = {};
+  const baseSectionByCourse = buildBaseSectionByCourse(rows); // قاعدة المقارنة للـ External
+
   for (const r of rows || []) {
     const rawDay = String(r.DayOfWeek || r.day_of_week || r.day || "").trim();
     const day = titleCaseDay(rawDay);
@@ -109,14 +154,56 @@ function rowsToSchedule(rows) {
     const startIdx = SLOT_STARTS.indexOf(startHM);
     if (startIdx === -1) continue;
 
+    // نحسب مدة الامتداد (rowSpan) 1 أو 2 مثل جدولك
     const sameEnd = SLOT_PARTS[startIdx].e;
     const nextEnd = SLOT_PARTS[startIdx + 1]?.e;
     let duration = 1;
     if (endHM === sameEnd) duration = 1;
     else if (nextEnd && endHM === nextEnd) duration = 2;
-    else continue;
+    else {
+      // fallback: لو المدة ≥ 100 دقيقة نعتبرها خانتين
+      const durMin = Math.max(hmToMin(endHM) - hmToMin(startHM), 0);
+      duration = durMin >= 100 ? 2 : 1;
+    }
 
-    const type = normalizeType(r.course_type);
+    // ===== تحديد النوع (وبالتالي اللون) =====
+    let type = "core"; // افتراضي محاضرة
+    const nameLower = String(r.course_name || "").toLowerCase();
+
+    if (r.is_external) {
+      // خارجية: نعتمد فرق الشعبة عن أصغر شعبة لنفس الكورس
+      const base = baseSectionByCourse[r.course_code];
+      const sn = Number(r.section_number);
+      if (Number.isFinite(base) && Number.isFinite(sn)) {
+        const diff = sn - base;
+        if (diff === 1) type = "tutorial"; // فرق 1 ⇒ تمارين
+        else if (diff >= 2) type = "lab";  // فرق 2 أو أكثر ⇒ معمل
+        else type = "core";                // فرق 0 ⇒ محاضرة
+      } else {
+        type = "core";
+      }
+    } else {
+      // داخلية: إن وجد "lab" أو "tutorial" بالاسم نستخدمه مباشرة
+      if (/lab|laborator/.test(nameLower)) {
+        type = "lab";
+      } else if (/tutorial/.test(nameLower)) {
+        type = "tutorial";
+      } else {
+        // غير محدد بالاسم ⇒ نعتمد يوم المحاضرات أو طول المدة
+        const isLectureDay = INTERNAL_LECTURE_DAYS.has(day);
+        type = (isLectureDay || duration > 1) ? "core" : "tutorial";
+      }
+    }
+
+    /* ✅ تطبيق الاستثناءات حسب كود المقرر (مثبّتة) */
+    {
+      const cc = String(r.course_code || "").toUpperCase();
+      if (COURSE_TYPE_OVERRIDES[cc]) {
+        type = COURSE_TYPE_OVERRIDES[cc];
+      }
+    }
+
+    // بناء خلية الجدول
     const subject = r.course_code
       ? `${r.course_code} — ${r.course_name}`
       : r.course_name || "Course";
@@ -127,8 +214,8 @@ function rowsToSchedule(rows) {
     out[day][label] = {
       subject,
       room,
-      type,
-      duration,
+      type,         // ← اللون يأخذ من هذا النوع (colorOf)
+      duration,     // rowSpan
       meta: {
         scheduleId: r.ScheduleID ?? null,
         level: r.Level ?? null,
@@ -137,6 +224,8 @@ function rowsToSchedule(rows) {
         sectionId: r.SectionID ?? null,
         courseCode: r.course_code ?? null,
         courseName: r.course_name ?? null,
+        isExternal: !!r.is_external,
+        sectionNumber: r.section_number ?? null,
         day,
         startHM,
         endHM,
@@ -146,7 +235,7 @@ function rowsToSchedule(rows) {
   return out;
 }
 
-/* ===== tabs: group-by-schedule ===== */
+/* تبويب الجداول حسب ScheduleID (لا علاقة له بالألوان) */
 function groupRowsBySchedule(rows) {
   const grouped = {};
   for (const row of rows || []) {
@@ -167,7 +256,7 @@ function groupRowsBySchedule(rows) {
   });
 }
 
-/* ===== buckets: كل لفل فيه قروبات ===== */
+/* تجميع القروبات داخل كل لفل (لا علاقة له بالألوان) */
 function buildLevelBuckets(allGroups) {
   const map = new Map();
   for (const g of allGroups) {
@@ -214,9 +303,10 @@ export default function FixedSchedule({
   const [submitting, setSubmitting] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState(null);
 
-  /* ===== مهم: skip واحد لكل render لمنع تكرار الخلايا عند الـrowSpan ===== */
+  /* مهم: لإخفاء الخلايا المدموجة (rowSpan) التالية ومنع تكرارها */
   const skip = useMemo(() => ({}), [scheduleGrid]);
 
+  /* جلب الداتا وبناء الجدول + الألوان */
   useEffect(() => {
     async function run() {
       setLoading(true);
@@ -244,7 +334,7 @@ export default function FixedSchedule({
           const payload = await res.json().catch(() => ({}));
           if (!res.ok) throw new Error(payload.error || `HTTP ${res.status}`);
 
-          const rows = groupsGridToRows(payload?.groups || []);
+          const rows = groupsGridToRows(payload?.groups || []); // ← نحضّر rows
           const grouped = groupRowsBySchedule(rows);
           return { level, groups: grouped };
         };
@@ -262,7 +352,7 @@ export default function FixedSchedule({
           setScheduleIdCurrent(g.scheduleId);
           setLevelCurrent(myLevel);
           setGroupNoCurrent(g.groupNo ?? 1);
-          setScheduleGrid(rowsToSchedule(g.rows));
+          setScheduleGrid(rowsToSchedule(g.rows)); // ← هنا نحسب النوع/الألوان
         } else {
           const levels = [1,2,3,4,5,6,7,8];
           const results = await Promise.allSettled(levels.map((lv) => fetchLevelGroups(lv)));
@@ -297,7 +387,7 @@ export default function FixedSchedule({
             setScheduleIdCurrent(curGroup.scheduleId);
             setLevelCurrent(curLevel.level);
             setGroupNoCurrent(curGroup.groupNo ?? 1);
-            setScheduleGrid(rowsToSchedule(curGroup.rows));
+            setScheduleGrid(rowsToSchedule(curGroup.rows)); // ← حساب التلوين
           }
         }
       } catch (e) {
@@ -326,7 +416,7 @@ export default function FixedSchedule({
       setScheduleIdCurrent(g.scheduleId);
       setLevelCurrent(g.level);
       setGroupNoCurrent(g.groupNo ?? 1);
-      setScheduleGrid(rowsToSchedule(g.rows));
+      setScheduleGrid(rowsToSchedule(g.rows)); // ← يعاد حساب النوع/الألوان للقروب الجديد
     } else {
       const curBucket = levelBuckets[levelPos] || { groups: [] };
       if (i < 0 || i >= curBucket.groups.length) return;
@@ -335,11 +425,17 @@ export default function FixedSchedule({
       setScheduleIdCurrent(g.scheduleId);
       setLevelCurrent(curBucket.level);
       setGroupNoCurrent(g.groupNo ?? 1);
-      setScheduleGrid(rowsToSchedule(g.rows));
+      setScheduleGrid(rowsToSchedule(g.rows)); // ← نفس الشيء
     }
   }
 
-  /* ===== أزرار Next/Previous للّفل في وضع All ===== */
+  function onCellClick(slot) {
+    setSelectedTarget(slot.meta ? { ...slot.meta, subject: slot.subject } : { subject: slot.subject });
+    setComment("");
+    setShowModal(true);
+  }
+
+  /* تنقّل بين المستويات في وضع "All" (عرض فقط) */
   function goNextLevel() {
     if (viewMode !== "all" || levelBuckets.length === 0) return;
     const next = (levelPos + 1) % levelBuckets.length;
@@ -422,61 +518,23 @@ export default function FixedSchedule({
           padding: 12px;
           background: #ffffff;
           box-shadow: 0 8px 24px rgba(16,24,40,.05);
-          @media (max-width: 768px) {
-    .table-fixed {
-      display: block;
-      overflow-x: auto;
-      white-space: nowrap;
-    }
+        }
 
-    th, td {
-      font-size: 0.75rem;
-      height: 55px;
-      padding: 2px;
-    }
-
-    .subject-box {
-      font-size: 0.75rem;
-      line-height: 1.1;
-      padding: 4px;
-    }
-
-    .room {
-      font-size: 0.65rem;
-    }
-
-    h2 {
-      font-size: 1.2rem;
-    }
-
-    .btn-feedback {
-      padding: 10px 20px;
-      font-size: 0.9rem;
-    }
-
-    .legend-box {
-      font-size: 0.8rem;
-    }
-
-    .container.my-4 {
-      padding-left: 8px;
-      padding-right: 8px;
-    }
-
-    .tab-card {
-      padding: 8px;
-    }
-  }
-
-  @media (max-width: 390px) {
-    .subject-box {
-      font-size: 0.7rem;
-    }
-    th, td {
-      font-size: 0.7rem;
-      height: 50px;
-    }
-  }
+        /* ✅ Responsive */
+        @media (max-width: 768px) {
+          .table-fixed { display: block; overflow-x: auto; white-space: nowrap; }
+          th, td { font-size: 0.75rem; height: 55px; padding: 2px; }
+          .subject-box { font-size: 0.75rem; line-height: 1.1; padding: 4px; }
+          .room { font-size: 0.65rem; }
+          h2 { font-size: 1.2rem; }
+          .btn-feedback { padding: 10px 20px; font-size: 0.9rem; }
+          .legend-box { font-size: 0.8rem; }
+          .container.my-4 { padding-left: 8px; padding-right: 8px; }
+          .tab-card { padding: 8px; }
+        }
+        @media (max-width: 390px) {
+          .subject-box { font-size: 0.7rem; }
+          th, td { font-size: 0.7rem; height: 50px; }
         }
       `}</style>
 
@@ -568,8 +626,8 @@ export default function FixedSchedule({
                   const slot = scheduleGrid?.[day]?.[time];
                   if (!slot) return <td key={day}></td>;
 
-                  const bg = colorOf(slot.type);
-                  const rowSpan = Math.max(1, slot.duration || 1);
+                  const bg = colorOf(slot.type);          // ← اللون النهائي للخلية
+                  const rowSpan = Math.max(1, slot.duration || 1); // ← امتداد الخلية
 
                   if (rowSpan > 1) {
                     for (let k = 1; k < rowSpan; k++) {
@@ -598,9 +656,9 @@ export default function FixedSchedule({
         </table>
       </div>
 
-      {/* Legend */}
+      {/* Legend — أضفت Elective عشان تبان في الدليل */}
       <div className="d-flex justify-content-center align-items-center mt-4 flex-wrap gap-3">
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div><span>Core / Lecture</span></div>
+        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div><span> Lecture</span></div>
         <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.tutorial }}></div><span>Tutorial</span></div>
         <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div><span>Lab</span></div>
       </div>
