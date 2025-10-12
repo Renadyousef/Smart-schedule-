@@ -110,6 +110,7 @@ npm install
 cd server
 npm install openai
 
+
 # 4. Create a .env file in the root of the project
 # paste the following keys
 # Note: JWT_SECRET will be changed at deployment for security purposes
