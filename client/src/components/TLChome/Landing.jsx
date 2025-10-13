@@ -20,6 +20,24 @@ function pickArr(v) {
   return [];
 }
 
+// Pick a friendly first name from local/session storage (like Student HomeLanding)
+function pickDisplayNameFromStorage() {
+  const keys = ["user", "profile", "account", "tlc", "instructor"];
+  const sources = [localStorage, sessionStorage];
+  for (const store of sources) {
+    for (const k of keys) {
+      const obj = safeParseJSON(store.getItem(k));
+      if (!obj) continue;
+      const userLike = obj.user || obj.profile || obj.account || obj;
+      const full = userLike?.name || [userLike?.firstName, userLike?.lastName].filter(Boolean).join(" ").trim();
+      if (full && String(full).trim()) {
+        return String(full).trim().split(/\s+/)[0];
+      }
+    }
+  }
+  return "User";
+}
+
 // يستخرج UserID من localStorage أو من JWT
 function resolveCurrentUserId(token) {
   // 1) من localStorage: user كـ JSON
@@ -133,6 +151,25 @@ export default function Landing() {
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [selected, setSelected] = useState(null);
   const [unread, setUnread] = useState(0);
+  const [displayName, setDisplayName] = useState("User");
+
+  // Keep a friendly name in sync with storage changes
+  useEffect(() => {
+    const compute = () => setDisplayName(pickDisplayNameFromStorage());
+    compute();
+    const onStorage = (e) => {
+      if (!e || ["user","profile","account","tlc","instructor"].includes(e.key)) compute();
+    };
+    const onFocus = () => compute();
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", onFocus);
+    const id = setInterval(compute, 2500);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(id);
+    };
+  }, []);
 
   const fetchUnread = useCallback(async () => {
     if (!currentUserId) { setUnread(0); return; }
@@ -216,7 +253,13 @@ export default function Landing() {
   const closeModal = () => setSelected(null);
 
   return (
-    <div className="container mt-4" style={{ maxWidth: 820 }}>
+    <div className="tlc-home">
+      <section className="hero d-flex align-items-center text-center text-white"> 
+        <div className="container"> 
+          <h1 className="fw-bold mb-3">Welcome {displayName}</h1>
+        </div>
+      </section>
+      <div className="container my-5" style={{ maxWidth: 820 }}>
       <div className="d-flex align-items-center justify-content-between mb-3">
         <h1 className="m-0 fw-bold">Notification</h1>
         <div className="d-flex align-items-center gap-2">
@@ -354,6 +397,11 @@ export default function Landing() {
           </div>
         </div>
       )}
+      </div>
+      <style>{`
+        .tlc-home { background: #f8fbff; min-height: 100vh; }
+        .hero { background: linear-gradient(135deg, #1766ff, #0a3ea7); padding: 80px 20px; }
+      `}</style>
     </div>
   );
 }
