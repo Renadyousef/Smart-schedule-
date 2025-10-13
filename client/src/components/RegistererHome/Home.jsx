@@ -1,5 +1,6 @@
 // src/components/RegistrarHome/Home.jsx
 import { BrowserRouter as Router, Routes, Route, Navigate, Link } from "react-router-dom";
+import { useEffect, useState } from "react";
 import Header from "./Header";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
@@ -9,6 +10,25 @@ import RegistrarProfile from "../Profiles/RegistrarProfile.jsx";
 import OfferElective from "../OfferElective/ViewElectiveRequests.jsx";
 import RegistrarRequests from "./RegistrarRequests.jsx";
 import RegistrarNotifications from "./RegistrarNotifications.jsx";
+
+// Small helper to read a friendly first name from storage
+function readJSON(s) { try { return s ? JSON.parse(s) : null; } catch { return null; } }
+function pickDisplayNameFromStorage() {
+  const stores = [localStorage, sessionStorage];
+  const keys = ["user", "profile", "account", "registrar"];
+  for (const store of stores) {
+    for (const k of keys) {
+      const obj = readJSON(store.getItem(k));
+      if (!obj) continue;
+      const base = obj.user || obj.profile || obj.account || obj;
+      const full = base?.name || [base?.firstName, base?.lastName].filter(Boolean).join(" ").trim();
+      if (full && String(full).trim()) {
+        return String(full).trim().split(/\s+/)[0];
+      }
+    }
+  }
+  return "Registrar";
+}
 
 /* ======================= Dashboard ======================= */
 function Dashboard() {
@@ -141,9 +161,34 @@ function CommitteeRequests() {
 
 /* ======================= Home (Router) ======================= */
 export default function Home() {
+  const [displayName, setDisplayName] = useState("Registrar");
+
+  useEffect(() => {
+    const compute = () => setDisplayName(pickDisplayNameFromStorage());
+    compute();
+    const onStorage = (e) => {
+      if (!e || ["user","profile","account","registrar"].includes(e.key)) compute();
+    };
+    const onFocus = () => compute();
+    window.addEventListener("storage", onStorage);
+    window.addEventListener("focus", onFocus);
+    const id = setInterval(compute, 2500);
+    return () => {
+      window.removeEventListener("storage", onStorage);
+      window.removeEventListener("focus", onFocus);
+      clearInterval(id);
+    };
+  }, []);
+
   return (
     <Router>
       <Header />
+      {/* Hero header to match other pages */}
+      <section className="hero d-flex align-items-center text-center text-white">
+        <div className="container">
+          <h1 className="fw-bold mb-3">Welcome {displayName}</h1>
+        </div>
+      </section>
       <Routes>
         {/* صفحة البداية (Home) */}
         <Route path="/" element={<Dashboard />} />
@@ -171,6 +216,10 @@ export default function Home() {
         {/* أي مسار غير معروف → رجوع للـ Home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      <style>{`
+        .hero { background: linear-gradient(135deg, #1766ff, #0a3ea7); padding: 80px 20px; }
+        body { background: #f8fbff; }
+      `}</style>
     </Router>
   );
 }
