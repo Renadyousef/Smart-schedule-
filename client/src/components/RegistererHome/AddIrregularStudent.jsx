@@ -35,8 +35,8 @@ export default function AddIrregularStudent() {
   // البحث بالاسم + قائمة اقتراحات
   const [nameQuery, setNameQuery] = useState("");
   const [searching, setSearching] = useState(false);
-  const [suggestions, setSuggestions] = useState([]); // {studentId, fullName}[]
-  const [selected, setSelected] = useState(null);     // {studentId, fullName}
+  const [suggestions, setSuggestions] = useState([]); // {studentId, fullName, departmentId, isDisabled}[]
+  const [selected, setSelected] = useState(null);     // {studentId, fullName, departmentId, isDisabled}
 
   // الحقول المعروضة/القابلة للتعديل
   const [levelInput, setLevelInput] = useState("");       // level (editable)
@@ -100,6 +100,12 @@ export default function AddIrregularStudent() {
 
   /* ------------ عند اختيار طالب ------------ */
   const handlePick = (item) => {
+    // امنعي اختيار طالب من قسم آخر
+    if (item?.isDisabled) {
+      setErrMsg("This student is from another department.");
+      return;
+    }
+
     setSelected(item);
     setNameQuery(item.fullName);
     setShowList(false);
@@ -139,6 +145,7 @@ export default function AddIrregularStudent() {
     setOkMsg(""); setErrMsg("");
 
     if (!selected?.studentId) return setErrMsg("Please select a student.");
+    if (selected?.isDisabled) return setErrMsg("This student is from another department.");
     if (hasLoggedIn === false) {
       return setErrMsg("This student has never logged in.");
     }
@@ -207,17 +214,35 @@ export default function AddIrregularStudent() {
                 style={{ position: "absolute", zIndex: 10, width: "100%", maxHeight: 280, overflowY: "auto" }}
               >
                 {searching && <div className="list-group-item disabled">Searching…</div>}
-                {suggestions.map((s) => (
-                  <button
-                    type="button"
-                    key={s.studentId}
-                    className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                    onClick={() => handlePick(s)}
-                  >
-                    <span>{s.fullName}</span>
-                    <small className="text-muted">#{s.studentId}</small>
-                  </button>
-                ))}
+                {suggestions.map((s) => {
+                  const disabled = !!s.isDisabled;
+                  return (
+                    <button
+                      type="button"
+                      key={s.studentId}
+                      className="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                      onClick={() => handlePick(s)}
+                      disabled={disabled}
+                      aria-disabled={disabled ? "true" : "false"}
+                      title={disabled ? "Student from another department" : "Select student"}
+                      style={{
+                        opacity: disabled ? 0.6 : 1,
+                        cursor: disabled ? "not-allowed" : "pointer",
+                        pointerEvents: disabled ? "none" : "auto"
+                      }}
+                    >
+                      <span>{s.fullName}</span>
+                      <div className="d-flex align-items-center gap-2">
+                        {disabled ? (
+                          <span className="badge text-bg-secondary">Other dept</span>
+                        ) : (
+                          <span className="badge text-bg-primary">SW Eng</span>
+                        )}
+                        <small className="text-muted">#{s.studentId}</small>
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
@@ -241,7 +266,6 @@ export default function AddIrregularStudent() {
               onChange={(e) => setLevelInput(e.target.value.replace(/[^\d]/g, ""))}
               placeholder="1..12"
             />
-            {/* <small className="text-muted">اتركه فارغًا لو ما تبين تغيّرينه؛ إن كان فارغ لن يتم تعديله.</small> */}
           </div>
 
           {/* Previous Level Courses */}

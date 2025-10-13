@@ -45,8 +45,8 @@ function normalizeCourses(courses) {
   return out;
 }
 
-/* ---------- search by name ---------- */
-/** GET /irregular/students/search?name=ali&limit=8&offset=0 */
+/* ---------- search by name (ترجيع isDisabled بدل الفلترة) ---------- */
+/** GET /irregular/students/search?name=ali&limit=8&offset=0&depId=4 */
 export const searchStudentsByName = async (req, res) => {
   const name = String(req.query.name || "").trim();
   const limit = Math.min(Math.max(parseInt(req.query.limit || "8", 10), 1), 50);
@@ -59,26 +59,50 @@ export const searchStudentsByName = async (req, res) => {
   const client = await pool.connect();
   try {
     const usersTable = await detectUsersTable(client);
+
+    // depId اختياري من الكويري، fallback إلى 4
+    let depId = Number(req.query.depId);
+    if (!Number.isFinite(depId)) {
+      // لو عندك الهيلبر getDepartmentIdByName: جرّبي تجيبيه بالاسم، وإلا 4
+      try {
+        depId = await getDepartmentIdByName(client, "software engineering");
+      } catch {}
+      if (!Number.isFinite(depId)) depId = 4;
+    }
+
     const pattern = `%${name}%`;
+
     const q = await client.query(
       `
-      select s."StudentID" as "studentId",
-             coalesce(u."Full_name",
-                      trim(coalesce(u."First_name",'') || ' ' || coalesce(u."Last_name",''))) as "fullName"
+      select
+        s."StudentID" as "studentId",
+        coalesce(u."Full_name",
+                 trim(coalesce(u."First_name",'') || ' ' || coalesce(u."Last_name",''))) as "fullName",
+        u."DepartmentID" as "departmentId",
+        case when u."DepartmentID" is distinct from $4 then true else false end as "isDisabled"
       from public."Students" s
       join ${usersTable} u on u."UserID" = s."StudentID"
-      where (u."Full_name" ilike $1)
-         or (u."First_name" ilike $1)
-         or (u."Last_name" ilike $1)
+      where u."Role" = 'student'
+        and (
+          u."Full_name"  ilike $1 or
+          u."First_name" ilike $1 or
+          u."Last_name"  ilike $1
+        )
       order by "fullName" asc
       limit $2 offset $3
       `,
-      [pattern, limit, offset]
+      [pattern, limit, offset, depId]
     );
 
     return res.json({
       ok: true,
-      results: q.rows.map(r => ({ studentId: r.studentId, fullName: r.fullName || "" })),
+      departmentId: depId,
+      results: q.rows.map(r => ({
+        studentId: r.studentId,
+        fullName: r.fullName || "",
+        departmentId: r.departmentId,
+        isDisabled: !!r.isDisabled
+      })),
       limit,
       offset,
     });
@@ -89,6 +113,7 @@ export const searchStudentsByName = async (req, res) => {
     client.release();
   }
 };
+
 
 /* ---------- get student info ---------- */
 /** GET /irregular/students/:id  -> fullName + level(from Students) + hasLoggedIn + irregular(PreviousLevelCourses) */
