@@ -64,7 +64,7 @@ function Dashboard() {
               <small className="text-muted">This Term</small>
             </div>
           </div>
-        </div>
+           </div>
       </div>
 
       {/* Quick Actions */}
@@ -80,8 +80,10 @@ function Dashboard() {
               Respond to Requests
             </Link>
 
-            <button className="btn btn-success">Offer New Elective</button>
-          </div>
+<Link to="/registrar/electives" className="btn btn-success">
+  Offer New Elective
+</Link>     
+     </div>
         </div>
       </div>
 
