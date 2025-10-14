@@ -316,27 +316,13 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
             <div className="mb-2">
               <label className="form-label">Response Type</label>
               <select className="form-select" value={mode} onChange={(e) => setMode(e.target.value)}>
-                
+                                
                 <option value="irregular">Add Irregular Student</option>
-                
+                                
+
+
               </select>
             </div>
-
-            {mode === "auto" && (
-              <>
-                {fields.length === 0 && <div className="alert alert-warning py-2">No needed fields in this request.</div>}
-                {fields.map((k) => (
-                  <div className="mb-2" key={k}>
-                    <label className="form-label">{k}</label>
-                    <input
-                      className="form-control"
-                      value={autoValues[k] ?? ""}
-                      onChange={(e) => setAutoValues((prev) => ({ ...prev, [k]: e.target.value }))}
-                    />
-                  </div>
-                ))}
-              </>
-            )}
 
             {mode === "irregular" && (
               <>
@@ -348,16 +334,16 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
                     value={irr.PreviousLevelCourses}
                     onChange={(e) => setIrr((p) => ({ ...p, PreviousLevelCourses: e.target.value }))}
                   />
-                  <small className="text-muted">comma/space separated; unique merged.</small>
+                  <small className="text-muted">comma/space separated</small>
                 </div>
                 <div className="mb-2">
-                  <label className="form-label">Level (optional)</label>
+                  <label className="form-label">Level </label>
                   <input
                     type="number"
                     className="form-control"
                     value={irr.Level}
                     onChange={(e) => setIrr((p) => ({ ...p, Level: e.target.value.replace(/[^\d]/g, "") }))}
-                    placeholder="1..12"
+                    placeholder="1..8"
                   />
                 </div>
                 <div className="form-check mb-2">
@@ -383,7 +369,7 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               </>
             )}
 
-            {mode === "custom" && <KeyValueEditor rows={kv} onChange={setKv} />}
+            
 
             <div className="mb-2">
               <label className="form-label">Line Status</label>
