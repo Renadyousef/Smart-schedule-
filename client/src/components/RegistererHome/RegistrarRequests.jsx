@@ -38,8 +38,9 @@ export default function RegistrarRequests() {
   const qparams = useMemo(() => (statusFilter ? { status: statusFilter } : {}), [statusFilter]);
 
   const reloadList = () =>
-    axios.get(`${API_BASE}/registrarRequests/requests`, { params: qparams })
-         .then((r) => setList(r.data || []));
+    axios
+      .get(`${API_BASE}/registrarRequests/requests`, { params: qparams })
+      .then((r) => setList(r.data || []));
 
   useEffect(() => {
     setErr("");
@@ -70,7 +71,11 @@ export default function RegistrarRequests() {
         <div className="card-body d-flex gap-3">
           <div>
             <label className="form-label mb-1">Status</label>
-            <select className="form-select" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <select
+              className="form-select"
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+            >
               <option value="">(any)</option>
               <option value="pending">pending</option>
               <option value="fulfilled">fulfilled</option>
@@ -115,11 +120,17 @@ export default function RegistrarRequests() {
                       <td>{r.title}</td>
                       <td>{r.type}</td>
                       <td>
-                        <span className={`badge ${
-                          r.status === "pending" ? "text-bg-warning" :
-                          r.status === "fulfilled" ? "text-bg-success" :
-                          r.status === "failed" ? "text-bg-danger" : "text-bg-secondary"
-                        }`}>
+                        <span
+                          className={`badge ${
+                            r.status === "pending"
+                              ? "text-bg-warning"
+                              : r.status === "fulfilled"
+                              ? "text-bg-success"
+                              : r.status === "failed"
+                              ? "text-bg-danger"
+                              : "text-bg-secondary"
+                          }`}
+                        >
                           {r.status}
                         </span>
                       </td>
@@ -157,7 +168,7 @@ export default function RegistrarRequests() {
   );
 }
 
-/* ---------- detail & respond (DataRequest only) ---------- */
+/* ---------- detail & respond (Irregular only) ---------- */
 function RequestDetail({ data, onClose, onUpdated }) {
   const fields = asArray(data.neededFields);
 
@@ -166,7 +177,9 @@ function RequestDetail({ data, onClose, onUpdated }) {
   const [err, setErr] = useState("");
 
   const setStatus = async (status) => {
-    setBusy(true); setMsg(""); setErr("");
+    setBusy(true);
+    setMsg("");
+    setErr("");
     try {
       await axios.post(`${API_BASE}/registrarRequests/requests/${data.id}/status`, { status });
       setMsg(`Status updated to ${status}.`);
@@ -189,11 +202,7 @@ function RequestDetail({ data, onClose, onUpdated }) {
           </small>
         </div>
         <div className="d-flex gap-2">
-          <button className="btn btn-outline-danger btn-sm" onClick={() => setStatus("rejected")}
-                  disabled={busy || data.status !== "pending"}>Reject</button>
-          <button className="btn btn-outline-success btn-sm" onClick={() => setStatus("fulfilled")}
-                  disabled={busy || data.status !== "pending"}>Approve</button>
-          <button className="btn btn-outline-secondary btn-sm" onClick={onClose}>Close</button>
+          
         </div>
       </div>
 
@@ -223,10 +232,14 @@ function RequestDetail({ data, onClose, onUpdated }) {
             </thead>
             <tbody>
               {data.students?.map((s, i) => (
-                <StudentRow key={s.crStudentId} i={i} s={s} fields={fields} reqId={data.id} onUpdated={onUpdated} />
+                <StudentRow key={s.crStudentId} i={i} s={s} reqId={data.id} onUpdated={onUpdated} />
               ))}
               {(!data.students || data.students.length === 0) && (
-                <tr><td colSpan={4} className="text-muted">No students.</td></tr>
+                <tr>
+                  <td colSpan={4} className="text-muted">
+                    No students.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -236,45 +249,39 @@ function RequestDetail({ data, onClose, onUpdated }) {
   );
 }
 
-/* ---------- flexible respond row (Auto / Irregular / Custom) ---------- */
-function StudentRow({ i, s, fields, reqId, onUpdated }) {
+/* ---------- Irregular-only respond row ---------- */
+function StudentRow({ i, s, reqId, onUpdated }) {
   const [show, setShow] = useState(false);
   const [sending, setSending] = useState(false);
   const [status, setStatus] = useState("fulfilled");
-  const [mode, setMode] = useState("auto"); // auto | irregular | custom
 
-  const [autoValues, setAutoValues] = useState(() => Object.fromEntries(fields.map((k) => [k, ""])));
-  const [irr, setIrr] = useState({ PreviousLevelCourses: "", Level: "", Note: "", Replace: false });
-  const [kv, setKv] = useState([{ key: "", value: "" }]);
+  // Irregular-only form state
+  const [irr, setIrr] = useState({
+    PreviousLevelCourses: "",
+    Level: "",
+    Note: "",
+    Replace: false,
+  });
 
   const submit = async () => {
     setSending(true);
     try {
-      let data;
-      if (mode === "auto") {
-        data = { category: "auto", ...autoValues };
-      } else if (mode === "irregular") {
-        const courses = String(irr.PreviousLevelCourses || "")
-          .split(/[, \n]+/g)
-          .map((s) => s.trim().toUpperCase())
-          .filter(Boolean);
-        const level = String(irr.Level || "").trim() === "" ? undefined : Number(irr.Level);
-        data = {
-          category: "irregular",
-          PreviousLevelCourses: courses,
-          ...(level !== undefined && !Number.isNaN(level) ? { Level: level } : {}),
-          replace: !!irr.Replace,
-          ...(irr.Note ? { Note: irr.Note } : {}),
-        };
-      } else {
-        const obj = {};
-        for (const row of kv) {
-          const k = String(row.key || "").trim();
-          if (!k) continue;
-          obj[k] = row.value ?? "";
-        }
-        data = { category: "custom", ...obj };
-      }
+      // Normalize irregular payload exactly like before
+      const courses = String(irr.PreviousLevelCourses || "")
+        .split(/[, \n]+/g)
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean);
+
+      const levelRaw = String(irr.Level || "").trim();
+      const levelNum = levelRaw === "" ? undefined : Number(levelRaw);
+
+      const data = {
+        category: "irregular",
+        PreviousLevelCourses: courses,
+        ...(levelNum !== undefined && !Number.isNaN(levelNum) ? { Level: levelNum } : {}),
+        replace: !!irr.Replace,
+        ...(irr.Note ? { Note: irr.Note } : {}),
+      };
 
       await axios.post(
         `${API_BASE}/registrarRequests/requests/${reqId}/students/${s.crStudentId}/respond`,
@@ -298,11 +305,17 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
         {s.studentId ? <small className="text-muted ms-2">ID: {s.studentId}</small> : null}
       </td>
       <td>
-        <span className={`badge ${
-          s.status === "pending" ? "text-bg-warning" :
-          s.status === "fulfilled" ? "text-bg-success" :
-          s.status === "failed" ? "text-bg-danger" : "text-bg-secondary"
-        }`}>
+        <span
+          className={`badge ${
+            s.status === "pending"
+              ? "text-bg-warning"
+              : s.status === "fulfilled"
+              ? "text-bg-success"
+              : s.status === "failed"
+              ? "text-bg-danger"
+              : "text-bg-secondary"
+          }`}
+        >
           {s.status}
         </span>
       </td>
@@ -313,64 +326,62 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
 
         {show && (
           <div className="border rounded p-3 mt-2" style={{ maxWidth: 560 }}>
+            {/* Keep a locked dropdown for consistent layout */}
             <div className="mb-2">
               <label className="form-label">Response Type</label>
-              <select className="form-select" value={mode} onChange={(e) => setMode(e.target.value)}>
-                                
+              <select className="form-select" value="irregular" disabled>
                 <option value="irregular">Add Irregular Student</option>
-                                
-
-
               </select>
             </div>
 
-            {mode === "irregular" && (
-              <>
-                <div className="mb-2">
-                  <label className="form-label">Previous Level Courses</label>
-                  <input
-                    className="form-control"
-                    placeholder="PHY201, MATH202, RAD203"
-                    value={irr.PreviousLevelCourses}
-                    onChange={(e) => setIrr((p) => ({ ...p, PreviousLevelCourses: e.target.value }))}
-                  />
-                  <small className="text-muted">comma/space separated</small>
-                </div>
-                <div className="mb-2">
-                  <label className="form-label">Level </label>
-                  <input
-                    type="number"
-                    className="form-control"
-                    value={irr.Level}
-                    onChange={(e) => setIrr((p) => ({ ...p, Level: e.target.value.replace(/[^\d]/g, "") }))}
-                    placeholder="1..8"
-                  />
-                </div>
-                <div className="form-check mb-2">
-                  <input
-                    id={`rep-${s.crStudentId}`}
-                    className="form-check-input"
-                    type="checkbox"
-                    checked={irr.Replace}
-                    onChange={(e) => setIrr((p) => ({ ...p, Replace: e.target.checked }))}
-                  />
-                  <label htmlFor={`rep-${s.crStudentId}`} className="form-check-label">
-                    Replace existing courses (instead of merge)
-                  </label>
-                </div>
-                <div className="mb-2">
-                  <label className="form-label">Note</label>
-                  <input
-                    className="form-control"
-                    value={irr.Note}
-                    onChange={(e) => setIrr((p) => ({ ...p, Note: e.target.value }))}
-                  />
-                </div>
-              </>
-            )}
+            {/* Irregular fields */}
+            <div className="mb-2">
+              <label className="form-label">Previous Level Courses</label>
+              <input
+                className="form-control"
+                placeholder="PHY201, MATH202, RAD203"
+                value={irr.PreviousLevelCourses}
+                onChange={(e) => setIrr((p) => ({ ...p, PreviousLevelCourses: e.target.value }))}
+              />
+              <small className="text-muted">comma/space separated</small>
+            </div>
 
-            
+            <div className="mb-2">
+              <label className="form-label">Level</label>
+              <input
+                type="number"
+                className="form-control"
+                value={irr.Level}
+                onChange={(e) =>
+                  setIrr((p) => ({ ...p, Level: e.target.value.replace(/[^\d]/g, "") }))
+                }
+                placeholder="1..8"
+              />
+            </div>
 
+            <div className="form-check mb-2">
+              <input
+                id={`rep-${s.crStudentId}`}
+                className="form-check-input"
+                type="checkbox"
+                checked={irr.Replace}
+                onChange={(e) => setIrr((p) => ({ ...p, Replace: e.target.checked }))}
+              />
+              <label htmlFor={`rep-${s.crStudentId}`} className="form-check-label">
+                Replace existing courses (instead of merge)
+              </label>
+            </div>
+
+            <div className="mb-2">
+              <label className="form-label">Note</label>
+              <input
+                className="form-control"
+                value={irr.Note}
+                onChange={(e) => setIrr((p) => ({ ...p, Note: e.target.value }))}
+              />
+            </div>
+
+            {/* Line status remains the same */}
             <div className="mb-2">
               <label className="form-label">Line Status</label>
               <select className="form-select" value={status} onChange={(e) => setStatus(e.target.value)}>
@@ -385,38 +396,13 @@ function StudentRow({ i, s, fields, reqId, onUpdated }) {
               <button className="btn btn-success" disabled={sending} onClick={submit}>
                 {sending ? "Saving…" : "Save"}
               </button>
-              <button className="btn btn-light" onClick={() => setShow(false)}>Close</button>
+              <button className="btn btn-light" onClick={() => setShow(false)}>
+                Close
+              </button>
             </div>
           </div>
         )}
       </td>
     </tr>
-  );
-}
-
-function KeyValueEditor({ rows, onChange }) {
-  const addRow = () => onChange([...rows, { key: "", value: "" }]);
-  const update = (i, patch) => {
-    const next = rows.map((r, idx) => (idx === i ? { ...r, ...patch } : r));
-    onChange(next);
-  };
-  const remove = (i) => onChange(rows.filter((_, idx) => idx !== i));
-
-  return (
-    <div className="mb-2">
-      <label className="form-label">Custom data</label>
-      {rows.map((row, i) => (
-        <div className="d-flex gap-2 mb-2" key={i}>
-          <input className="form-control" placeholder="key" value={row.key}
-                 onChange={(e) => update(i, { key: e.target.value })} />
-          <input className="form-control" placeholder="value" value={row.value}
-                 onChange={(e) => update(i, { value: e.target.value })} />
-          <button type="button" className="btn btn-outline-danger" onClick={() => remove(i)}>–</button>
-        </div>
-      ))}
-      <button type="button" className="btn btn-outline-secondary btn-sm" onClick={addRow}>
-        + Add row
-      </button>
-    </div>
   );
 }
