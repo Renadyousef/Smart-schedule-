@@ -660,7 +660,7 @@ export default function GeneratedSchedule() {
 
   const activeSchedule = schedules.find((s) => s.ScheduleID === scheduleId) ?? null;
   const status = activeSchedule?.Status ?? null;
-  const locked = status === "shared" || status === "approved";
+  const locked = status === "approved";
   const editDisabled = !scheduleId || locked;
   const generateDisabled = busy || !scheduleId || locked;
   const showApprove = Boolean(scheduleId) && status === "generated";
@@ -754,7 +754,7 @@ export default function GeneratedSchedule() {
       )}
       {scheduleId && status === "shared" && (
         <Alert variant="secondary" className="text-center">
-          This schedule has been shared and can no longer be modified.
+          This schedule has been shared. You can continue editing until it is approved.
         </Alert>
       )}
       {scheduleId && status === "approved" && (

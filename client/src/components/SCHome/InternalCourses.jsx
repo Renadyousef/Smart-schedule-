@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import axios from "axios";
-import { Container, Button, Spinner, Alert } from "react-bootstrap";
+import { Container, Button, Spinner } from "react-bootstrap";
 
 const STORAGE_KEY = "sc.activeScheduleId";
 const EVENT_NAME = "sc-schedule-changed";
@@ -135,6 +135,9 @@ export default function InternalCourses() {
         .sc-toolbar__info { font-size: 0.83rem; color: #536487; }
         .sc-toolbar__actions { display: flex; flex-wrap: wrap; gap: 10px; }
         .sc-toolbar .btn { border-radius: 10px; font-weight: 600; min-width: 140px; }
+        .sc-guide { background: #eef5ff; border: 1px solid #d6e4ff; border-radius: 14px; padding: 18px 20px; margin-bottom: 18px; box-shadow: 0 6px 18px rgba(17, 51, 85, 0.08); }
+        .sc-guide__title { font-weight: 700; font-size: 0.95rem; color: #113355; margin-bottom: 8px; }
+        .sc-guide__list { margin: 0; padding-left: 20px; font-size: 0.85rem; color: #42506a; display: grid; gap: 6px; }
         .sc-card-list { list-style: none; display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 14px; padding: 0; margin: 0; }
         .sc-card { background: #fff; border-radius: 14px; padding: 16px 18px; border: 1px solid #e0e6f4; box-shadow: 0 8px 20px rgba(15, 30, 60, 0.05); display: flex; flex-direction: column; gap: 6px; }
         .sc-card__code { font-weight: 700; font-size: 0.95rem; color: #132c4e; }
@@ -169,6 +172,16 @@ export default function InternalCourses() {
               Auto-Generate Schedule
             </Button>
           </div>
+        </div>
+
+        <div className="sc-guide">
+          <div className="sc-guide__title">Internal Courses Quick Guide</div>
+          <ol className="sc-guide__list">
+            <li>Check the detected level before you start editing.</li>
+            <li>Click <strong>Rescan</strong> whenever you need the latest course data.</li>
+            <li>When the details look right, press <strong>Auto-Generate Schedule</strong>.</li>
+            <li>Look through the cards below to confirm everything looks correct.</li>
+          </ol>
         </div>
 
         {internalRows.length ? (
