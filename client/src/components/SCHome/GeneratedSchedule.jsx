@@ -663,7 +663,8 @@ export default function GeneratedSchedule() {
   const locked = status === "approved";
   const editDisabled = !scheduleId || locked;
   const generateDisabled = busy || !scheduleId || locked;
-  const showApprove = Boolean(scheduleId) && status === "generated";
+  const showApprove =
+    Boolean(scheduleId) && (status === "generated" || status === "shared");
   const baseSectionNumber = Number(addForm.sectionNumber);
   const hasBaseSection = !!addForm.sectionNumber && !Number.isNaN(baseSectionNumber);
 

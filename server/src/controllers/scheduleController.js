@@ -1075,13 +1075,10 @@ export const approveSchedule = async (req, res) => {
     }
 
     const status = current.rows[0].Status;
-    if (status === "shared") {
-      return res.status(409).json({ msg: "Schedule already shared" });
-    }
     if (status === "approved") {
       return res.status(200).json({ msg: "Schedule already approved" });
     }
-    if (status !== "generated") {
+    if (status !== "generated" && status !== "shared") {
       return res
         .status(409)
         .json({ msg: "Schedule must be generated before approval", status });
