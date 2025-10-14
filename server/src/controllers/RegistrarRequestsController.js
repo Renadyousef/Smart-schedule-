@@ -2,7 +2,8 @@
 import pool from "../../DataBase_config/DB_config.js";
 
 /* -------------------- shared helpers -------------------- */
-function handle500(res, _label, err) {
+function handle500(res, label, err) {
+  console.error(label, err);
   return res
     .status(500)
     .json({ error: "Server error", message: err?.message ?? null, detail: err?.detail ?? null });
@@ -207,6 +208,7 @@ export const respondForStudent = async (req, res) => {
       [JSON.stringify(data), lineStatus, crStudentId, id]
     );
 
+    // ---- irregular write-through (كما هو) ----
     if (isIrregularAction(data)) {
       const studentId = await resolveStudentId(client, { requestId: id, crStudentId, data });
       if (studentId) {
@@ -282,6 +284,7 @@ export const respondForStudent = async (req, res) => {
       }
     }
 
+    // ---- تجميع الحالة العامة لخطوط الطلب ----
     const agg = await client.query(
       `select
          count(*) filter (where "Status" = 'pending') as pending,
@@ -297,12 +300,80 @@ export const respondForStudent = async (req, res) => {
 
     if (pending === 0) {
       const parentStatus = failed > 0 ? "failed" : rejected > 0 ? "rejected" : "fulfilled";
+
+      // حدّث حالة الطلب الأب
       await client.query(
         `update public."CommitteeRequests"
             set "Status"=$2,"HandledAt"=now(),"UpdatedAt"=now()
           where "RequestID"=$1`,
         [id, parentStatus]
       );
+
+      // ✅ إشعار respond_request: Message = ملاحظة الريجستر فقط، التفاصيل داخل Data
+      const publicMsg =
+        parentStatus === "rejected" ? "rejected" :
+        parentStatus === "fulfilled" ? "approved" : null;
+
+      if (publicMsg) {
+        const hdr2 = await client.query(
+          `select "RegistrarID","Level" from public."CommitteeRequests" where "RequestID"=$1`,
+          [id]
+        );
+        const createdByForPublic = hdr2.rows[0]?.RegistrarID ?? 1;
+        const level = hdr2.rows[0]?.Level ?? null;
+
+        const aggQ = await client.query(
+          `select
+             coalesce(jsonb_agg(crs."StudentName" order by crs."CRStudentID"), '[]'::jsonb) as names,
+             count(*)::int as total,
+             array_remove(
+               array_agg(
+                 nullif(
+                   coalesce(
+                     crs."ResponseData"->>'note',
+                     crs."ResponseData"->>'Note',
+                     crs."ResponseData"->>'comment',
+                     crs."ResponseData"->>'Comment',
+                     crs."ResponseData"->>'message',
+                     crs."ResponseData"->>'Message'
+                   ), ''
+                 )
+               ),
+               null
+             ) as notes
+           from public."CommitteeRequestStudents" crs
+           where crs."RequestID" = $1`,
+          [id]
+        );
+
+        const names = aggQ.rows[0]?.names ?? [];
+        const total = Number(aggQ.rows[0]?.total ?? 0);
+        const notes = (aggQ.rows[0]?.notes || []).filter(Boolean);
+        const message = notes.length ? notes.join(" | ") : ""; // 👈 رسالة = النوت فقط
+
+        const dataJson = {
+          requestId: Number(id),
+          level: level ?? null,
+          students: (names || []).filter(Boolean),
+          total,
+          status: publicMsg,
+          notes, // احتفاظ بالنوتات في Data أيضًا للعرض التفصيلي
+        };
+
+        await client.query(
+          `INSERT INTO public."Notifications"
+            ("Title","Message","ReceiverID","Type","Entity","EntityId","Data","CreatedBy","IsRead")
+           VALUES ($1,$2,NULL,$3,'CommitteeRequest',$4,$5,$6,FALSE)`,
+          [
+            "respond request",
+            message,                  // فقط النوت هنا
+            "respond_request",
+            Number(id),
+            JSON.stringify(dataJson), // كل التفاصيل هنا
+            createdByForPublic,
+          ]
+        );
+      }
     } else {
       await client.query(
         `update public."CommitteeRequests" set "UpdatedAt"=now() where "RequestID"=$1`,
@@ -310,6 +381,7 @@ export const respondForStudent = async (req, res) => {
       );
     }
 
+    // إشعار داخلي للجنة — كما كان
     try {
       let receiverId = bodyReceiverId ? Number(bodyReceiverId) : null;
       let createdById = bodyCreatedBy ? Number(bodyCreatedBy) : null;
@@ -344,8 +416,8 @@ export const respondForStudent = async (req, res) => {
           ]
         );
       }
-    } catch (_notifyErr) {
-      /* silent */
+    } catch (notifyErr) {
+      console.warn("respondForStudent: notification insert skipped", notifyErr?.message);
     }
 
     await client.query("COMMIT");
@@ -360,8 +432,6 @@ export const respondForStudent = async (req, res) => {
 
 /** POST /registrarRequests/requests/:id/status
  *  Body: { status: 'fulfilled' | 'rejected' | 'pending' | 'failed' | 'approved' }
- *//** POST /registrarRequests/requests/:id/status
- *  Body: { status: 'fulfilled' | 'rejected' | 'pending' | 'failed' | 'approved' }
  */
 export const updateRegistrarRequestStatus = async (req, res) => {
   try {
@@ -369,8 +439,11 @@ export const updateRegistrarRequestStatus = async (req, res) => {
     const raw = String((req.body || {}).status || "").toLowerCase().trim();
     const s = raw === "approved" ? "fulfilled" : raw;
 
+    console.log("🔥 updateRegistrarRequestStatus FROM: server/src/controllers/RegistrarRequestsController.js");
     const allowed = new Set(["pending", "fulfilled", "rejected", "failed"]);
     if (!allowed.has(s)) return res.status(400).json({ error: "Invalid status" });
+
+    console.log("➡️ updateRegistrarRequestStatus params:", { id, raw, normalized: s });
 
     const r = await pool.query(
       `update public."CommitteeRequests"
@@ -380,9 +453,10 @@ export const updateRegistrarRequestStatus = async (req, res) => {
       returning "RequestID"`,
       [id, s]
     );
+    console.log("➡️ updated rows:", r.rowCount);
     if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
 
-    // (1) إشعار داخلي للجنة
+    /* (1) إشعار داخلي للجنة */
     try {
       const hdr = await pool.query(
         `select "CommitteeID","RegistrarID","CreatedBy","Title"
@@ -410,35 +484,81 @@ export const updateRegistrarRequestStatus = async (req, res) => {
           ]
         );
       }
-    } catch (_notifyErr) {
-      /* silent */
+    } catch (notifyErr) {
+      console.warn("⚠️ committee notification skipped:", notifyErr?.message);
     }
 
-    // (2) إشعار عام respond_request
+    /* (2) إشعار عام respond_request — Message = ملاحظة الريجستر فقط؛ التفاصيل داخل Data */
     try {
       const publicMsg = s === "rejected" ? "rejected" : (s === "fulfilled" ? "approved" : null);
 
       if (publicMsg) {
         const hdr2 = await pool.query(
-          `select "RegistrarID" from public."CommitteeRequests" where "RequestID"=$1`,
+          `select "RegistrarID","Level" from public."CommitteeRequests" where "RequestID"=$1`,
           [id]
         );
         const createdByForPublic = hdr2.rows[0]?.RegistrarID ?? 1;
+        const level = hdr2.rows[0]?.Level ?? null;
 
-        await pool.query(
+        const aggQ = await pool.query(
+          `select
+             coalesce(jsonb_agg(crs."StudentName" order by crs."CRStudentID"), '[]'::jsonb) as names,
+             count(*)::int as total,
+             array_remove(
+               array_agg(
+                 nullif(
+                   coalesce(
+                     crs."ResponseData"->>'note',
+                     crs."ResponseData"->>'Note',
+                     crs."ResponseData"->>'comment',
+                     crs."ResponseData"->>'Comment',
+                     crs."ResponseData"->>'message',
+                     crs."ResponseData"->>'Message'
+                   ), ''
+                 )
+               ),
+               null
+             ) as notes
+           from public."CommitteeRequestStudents" crs
+           where crs."RequestID" = $1`,
+          [id]
+        );
+
+        const names = aggQ.rows[0]?.names ?? [];
+        const total = Number(aggQ.rows[0]?.total ?? 0);
+        const notes = (aggQ.rows[0]?.notes || []).filter(Boolean);
+        const message = notes.length ? notes.join(" | ") : ""; // 👈 الرسالة = النوت فقط
+
+        const dataJson = {
+          requestId: Number(id),
+          level: level ?? null,
+          students: (names || []).filter(Boolean),
+          total,
+          status: publicMsg,
+          notes,
+        };
+
+        const ins = await pool.query(
           `INSERT INTO public."Notifications"
             ("Title","Message","ReceiverID","Type","Entity","EntityId","Data","CreatedBy","IsRead")
-           VALUES ($1, $2, NULL, $3, NULL, NULL, NULL, $4, FALSE)`,
+           VALUES ($1,$2,NULL,$3,'CommitteeRequest',$4,$5,$6,FALSE)
+           RETURNING "NotificationID"`,
           [
             "respond request",
-            `${publicMsg} (#${id})`, // ✅ أضفنا رقم الطلب مع النص
+            message,                  // فقط النوت
             "respond_request",
+            Number(id),
+            JSON.stringify(dataJson), // كل التفاصيل في Data
             createdByForPublic
           ]
         );
+
+        console.log("[respond_request] inserted ✅ id:", ins.rows[0]?.NotificationID);
+      } else {
+        console.log("[respond_request] skipped (status not fulfilled/rejected)");
       }
-    } catch (_publicNotifyErr) {
-      /* silent */
+    } catch (publicNotifyErr) {
+      console.error("❌ public respond_request insert failed:", publicNotifyErr);
     }
 
     return res.json({ ok: true });

@@ -11,13 +11,10 @@ const ALLOWED_TYPES_FOR_SC = [
 
 /* ===== اكتشاف جدول المستخدمين User/Users ===== */
 async function detectUsersTable() {
-  // نحاول Users أولًا
   const q1 = await pool.query(`select to_regclass('public."Users"') as r`);
   if (q1.rows[0]?.r) return `public."Users"`;
-  // ثم User
   const q2 = await pool.query(`select to_regclass('public."User"') as r`);
   if (q2.rows[0]?.r) return `public."User"`;
-  // fallback آمن
   return `public."User"`;
 }
 
@@ -95,6 +92,7 @@ export async function getSCNotifications(req, res) {
           END
         ) AS "TitleDisplay",
         n."Message",
+        n."Data" AS "Data",              -- ✅ مهم: نرجّع الـ Data للفرونت
         n."CreatedAt",
         n."CreatedBy",
         n."ReceiverID",
@@ -104,7 +102,7 @@ export async function getSCNotifications(req, res) {
         n."IsRead",
         n."ReadAt",
         ${NAME_SQL},
-        ${NAME_SQL.replace(' AS "Full_name"', ' AS "CreatedByName"')}, -- اسم المُنشئ صريحًا
+        ${NAME_SQL.replace(' AS "Full_name"', ' AS "CreatedByName"')},
         u."Email" AS "Email",
         sch."Level"   AS "ScheduleLevel",
         sch."GroupNo" AS "GroupNo"

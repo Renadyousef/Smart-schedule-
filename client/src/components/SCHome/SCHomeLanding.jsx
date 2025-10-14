@@ -1,3 +1,4 @@
+// client/src/pages/Student/HomeLanding.jsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
@@ -5,7 +6,7 @@ import "bootstrap/dist/css/bootstrap.min.css";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
-/* ===== أدوات قراءة الاسم/المستوى من التخزين كما هي (بدون استخدام البوب-أب) ===== */
+/* ===== تخمين الاسم/المستوى من التخزين المحلي كما هي ===== */
 function coerceLevelFlexible(val) {
   if (val === undefined || val === null) return null;
   const s = String(val).trim();
@@ -58,21 +59,30 @@ function pickUserAndLevelFromStorage() {
   return { name, level };
 }
 
-/* ===== لوحة إشعارات بنفس ديزاين SCNotifications ===== */
-/* ===== لوحة إشعارات بدون إظهار respond_request نهائيًا ===== */
+function toNiceText(v) {
+  if (v === null || v === undefined) return "";
+  if (Array.isArray(v)) return v.map(toNiceText).join(", ");
+  if (typeof v === "object") {
+    const pairs = Object.entries(v).map(([k,val]) => `${k}: ${toNiceText(val)}`);
+    return pairs.join(" | ");
+  }
+  return String(v);
+}
+function safeParse(s) { try { return JSON.parse(s); } catch { return null; } }
+
+/* ===== لوحة الإشعارات ===== */
 function StudentNotificationsPanel() {
   const [items, setItems] = React.useState([]);
   const [onlyUnread, setOnlyUnread] = React.useState(false);
-  const [typeFilter, setTypeFilter] = React.useState("all");
+  const [typeFilter, setTypeFilter] = React.useState("respond_request"); // تركيز على Respond request
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState("");
+  const [expanded, setExpanded] = React.useState(() => new Set());
 
   const unreadCount = React.useMemo(() => items.filter((n) => !n.IsRead).length, [items]);
 
   const filtered = React.useMemo(() => {
     return items.filter((n) => {
-      // ✅ اخفِ أي إشعار respond_request تمامًا
-      if (n.Type === "respond_request") return false;
       if (onlyUnread && n.IsRead) return false;
       if (typeFilter !== "all" && n.Type !== typeFilter) return false;
       return true;
@@ -84,11 +94,12 @@ function StudentNotificationsPanel() {
     setErr("");
     try {
       const params = {};
-      // حتى لو اختار المستخدم respond_request، سنخفيه لاحقًا بالفلترة أعلاه
-      if (typeFilter !== "all") params.type = typeFilter;
       if (onlyUnread) params.unread = 1;
+      if (typeFilter !== "all") params.type = typeFilter;
 
-      const res = await axios.get(`${API_BASE}/api/notifications/sc`, { params });
+      // ✅ دايمًا من /api/notifications/sc مع تمرير type
+      const url = `${API_BASE}/api/notifications/sc`;
+      const res = await axios.get(url, { params });
       setItems(res.data || []);
     } catch (e) {
       console.error(e);
@@ -117,24 +128,13 @@ function StudentNotificationsPanel() {
     }
   }
 
-  async function markAllRead() {
-    try {
-      const body = {};
-      if (typeFilter !== "all") body.type = typeFilter;
-      await axios.put(`${API_BASE}/api/notifications/sc/mark-all-read`, body);
-      setItems((prev) =>
-        prev.map((n) => {
-          if (typeFilter === "all" || n.Type === typeFilter) {
-            return { ...n, IsRead: true, ReadAt: n.ReadAt || new Date().toISOString() };
-          }
-          return n;
-        })
-      );
-    } catch (e) {
-      console.error(e);
-      alert("Failed to mark all as read.");
-    }
-  }
+  const toggleExpand = (id) => {
+    setExpanded((prev) => {
+      const s = new Set(prev);
+      if (s.has(id)) s.delete(id); else s.add(id);
+      return s;
+    });
+  };
 
   return (
     <div className="card border-0 shadow-sm">
@@ -177,16 +177,13 @@ function StudentNotificationsPanel() {
               <option value="schedule_feedback_student">Schedule feedback (student)</option>
               <option value="tlc_schedule_feedback">Schedule feedback (TLC)</option>
               <option value="register_to_scheduler">Elective Offer</option>
-              {/* تمت إزالة خيار respond_request من الفلتر واجهةً */}
+              <option value="respond_request">Respond request</option>
             </select>
           </div>
 
           <div className="col-12 col-sm-auto d-flex gap-2">
             <button className="btn btn-outline-secondary" onClick={fetchData}>
               Refresh
-            </button>
-            <button className="btn btn-outline-primary" onClick={markAllRead}>
-              Mark all as read
             </button>
           </div>
         </div>
@@ -203,52 +200,127 @@ function StudentNotificationsPanel() {
           <div className="alert alert-warning mb-0">No notifications.</div>
         )}
 
-        {/* قائمة الإشعارات (بدون أي عرض لrespond_request) */}
+        {/* قائمة الإشعارات */}
         <div className="list-group">
-          {filtered.map((n) => (
-            <div key={n.NotificationID} className="list-group-item d-flex justify-content-between align-items-start">
-              <div className="me-3">
-                <div className="d-flex align-items-center gap-2">
-                  <strong>{n.TitleDisplay || "Notification"}</strong>
-                  {!n.IsRead && <span className="badge bg-primary">New</span>}
+          {filtered.map((n) => {
+            const isRespond = n.Type === "respond_request";
+            const isOpen = expanded.has(n.NotificationID);
+
+            // تفاصيل من Data
+            const dataObj =
+              typeof n.Data === "string" ? safeParse(n.Data) :
+              (n.Data && typeof n.Data === "object" ? n.Data : null);
+
+            // الشارة تعتمد على Message
+            const statusBadge =
+              n.Message === "approved" ? (
+                <span className="badge bg-success">Approved</span>
+              ) : n.Message === "rejected" ? (
+                <span className="badge bg-danger">Rejected</span>
+              ) : null;
+
+            const rows = dataObj
+              ? [
+                  ["request #", dataObj.requestId ?? "—"],
+                  ["level", dataObj.level ?? "N/A"],
+                  ["students", Array.isArray(dataObj.students) ? dataObj.students.join(", ") : "N/A"],
+                  ["total", dataObj.total ?? "—"],
+                  ["status", dataObj.status ?? "—"],
+                  ["notes", Array.isArray(dataObj.notes) && dataObj.notes.length ? dataObj.notes.join(" | ") : "—"],
+                ]
+              : null;
+
+            return (
+              <div key={n.NotificationID} className="list-group-item">
+                <div className="d-flex justify-content-between align-items-start">
+                  <div className="me-3">
+                    <div className="d-flex align-items-center gap-2">
+                      <strong>{n.TitleDisplay || "Notification"}</strong>
+                      {statusBadge}
+                      {!n.IsRead && <span className="badge bg-primary">New</span>}
+                    </div>
+
+                    {/* لا نعرض From/Email/Schedule إذا كان Respond Request */}
+                    {!isRespond && (
+                      <>
+                        <div className="text-muted small mt-1">
+                          From: {n.Full_name || n.CreatedByName || "Unknown"}
+                          {n.Email && <div>{n.Email}</div>}
+                        </div>
+                        {(n.ScheduleLevel != null || n.GroupNo != null) && (
+                          <div className="text-muted small">
+                            Schedule: {n.ScheduleLevel != null ? `L${n.ScheduleLevel}` : "—"}
+                            {(n.ScheduleLevel != null && n.GroupNo != null) ? " • " : " "}
+                            {n.GroupNo != null ? `Group ${n.GroupNo}` : ""}
+                          </div>
+                        )}
+                      </>
+                    )}
+
+                    {/* الرسالة */}
+                    {n.Message && (
+                      <div className="text-body mt-1" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
+                        {isRespond
+                          ? (<>{n.Message} — <span className="text-muted">Select "View more" to see details</span></>)
+                          : n.Message}
+                      </div>
+                    )}
+
+                    <small className="text-muted d-block mt-1">
+                      {n.CreatedAt ? new Date(n.CreatedAt).toLocaleString() : ""}
+                    </small>
+                  </div>
+
+                  <div className="d-flex align-items-center gap-2">
+                    {n.IsRead ? (
+                      <button
+                        className="btn btn-sm btn-outline-secondary"
+                        onClick={() => markRead(n.NotificationID, false)}
+                      >
+                        Mark as unread
+                      </button>
+                    ) : (
+                      <button
+                        className="btn btn-sm btn-success"
+                        onClick={() => markRead(n.NotificationID, true)}
+                      >
+                        Mark as read
+                      </button>
+                    )}
+
+                    {/* زر View more فقط للـ respond_request */}
+                    {isRespond && dataObj && (
+                      <button
+                        className="btn btn-sm btn-outline-dark"
+                        onClick={() => toggleExpand(n.NotificationID)}
+                      >
+                        {isOpen ? "Hide" : "View more"}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
-                <div className="text-muted small mt-1">
-                  From: {n.Full_name || n.CreatedByName || "Unknown"}
-                  {Number.isFinite(n.ScheduleLevel) && (
-                    <span className="ms-2">
-                      (Level {n.ScheduleLevel}, Group {n.GroupNo ?? 1})
-                    </span>
-                  )}
-                  {n.Email && <div>{n.Email}</div>}
-                </div>
-
-                <div className="text-body mt-1">{n.Message}</div>
-                <small className="text-muted d-block mt-1">
-                  {n.CreatedAt ? new Date(n.CreatedAt).toLocaleString() : ""}
-                </small>
-              </div>
-
-              <div className="d-flex align-items-center gap-2">
-                {n.IsRead ? (
-                  <button
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => markRead(n.NotificationID, false)}
-                  >
-                    Mark as unread
-                  </button>
-                ) : (
-                  <button
-                    className="btn btn-sm btn-success"
-                    onClick={() => markRead(n.NotificationID, true)}
-                  >
-                    Mark as read
-                  </button>
+                {/* تفاصيل respond_request: جدول من Data */}
+                {isRespond && isOpen && dataObj && (
+                  <div className="mt-3 p-3 border rounded bg-light">
+                    <div className="mb-2 fw-semibold">Response Data</div>
+                    <div className="table-responsive">
+                      <table className="table table-sm align-middle mb-0">
+                        <tbody>
+                          {rows?.map(([k,v]) => (
+                            <tr key={k}>
+                              <th style={{width: "180px"}} className="text-muted">{k}</th>
+                              <td>{toNiceText(v)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
                 )}
-                {/* لا View more ولا أي شيء يخص respond_request */}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
