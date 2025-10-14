@@ -71,7 +71,7 @@ export default function CreateRequest() {
       const { data } = await axios.post(`${API_BASE}/createRequests/requests`, payload, {
         headers: { "Content-Type": "application/json", Accept: "application/json" },
       });
-      setOkMsg(`Created successfully ${padHash(data?.id)}`);
+      setOkMsg(`Create Request Successfully`);
       setTimeout(() => setOkMsg(""), 2000);
 
       // reset
