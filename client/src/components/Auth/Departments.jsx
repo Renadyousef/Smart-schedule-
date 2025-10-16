@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import API from "../../api"; 
 
 export default function DepartmentDropdown({ onSelect }) {
   const [departments, setDepartments] = useState([]);
 
   useEffect(() => {
-    axios.get("http://localhost:5000/api/")
+    API.get("/api/")
       .then((res) => {
         setDepartments(res.data);
         console.log(departments);

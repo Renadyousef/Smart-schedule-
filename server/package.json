@@ -1,10 +1,12 @@
 {
   "name": "smart-schedule-",
   "version": "1.0.0",
+  "type": "module",
   "description": "",
   "main": "index.js",
   "scripts": {
-    "dev": "nodemon server/src/index.js"
+    "dev": "nodemon src/index.js",
+    "start": "node src/index.js"
   },
   "repository": {
     "type": "git",
@@ -22,7 +24,7 @@
     "bcrypt": "^6.0.0",
     "bootstrap-icons": "^1.13.1",
     "cors": "^2.8.5",
-    "dotenv": "^17.2.2",
+    "dotenv": "^17.2.3",
     "express": "^5.1.0",
     "jsonwebtoken": "^9.0.2",
     "openai": "^6.0.0",

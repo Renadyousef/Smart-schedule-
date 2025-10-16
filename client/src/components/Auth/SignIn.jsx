@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { validateEmail, validatePassword } from "./validations";
 import axios from "axios";
+import API from "../../API_continer"; 
+
 
 export default function SignIn({ onLogin }) {
   const [inputs, setInputs] = useState({ email: "", password: "" });
@@ -36,7 +38,7 @@ export default function SignIn({ onLogin }) {
     if (!Object.values(allErrors).every(x => !x)) return;
 
     try {
-      const res = await axios.post("http://localhost:5000/auth/signin", inputs);
+      const res = await API.post("/auth/signin", inputs);
       const { token, user } = res.data || {};
       if (!token || !user) {
         alert("Unexpected server response.");

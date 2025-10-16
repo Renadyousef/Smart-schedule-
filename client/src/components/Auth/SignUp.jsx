@@ -2,6 +2,7 @@ import { useState } from "react";
 import { validateEmail, validatePassword, validateName, validateDropdown, getRoleByEmail } from "./validations";
 import axios from "axios";
 import DepartmentDropdown from "./Departments";
+import API from "../../API_continer"; 
 
 export default function SignUp({ onSignedUp }) {
   const [inputs, setInputs] = useState({
@@ -91,7 +92,7 @@ export default function SignUp({ onSignedUp }) {
     }
 
     try {
-      await axios.post("http://localhost:5000/auth/signup", inputs);
+      await API.post("/auth/signup", inputs);
       alert("Signed up successfully. Please sign in.");
       localStorage.setItem("prefillEmail", inputs.email);
       if (onSignedUp) onSignedUp();

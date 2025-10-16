@@ -1,0 +1,23 @@
+#this file has env varaibles and defines connection between client,server continers
+#docker will expose the keys in env to the front/back continer accordingly
+version: '3'
+services:
+  server:
+    build: ./server
+    env_file:
+     - ./.env      # <-- your root-level env file
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      API_KEY: ${OPENAI_API_KEY}
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build: ./client
+    environment:
+      VITE_API_URL: http://server:5000
+    ports:
+      - "3000:80"
+    depends_on:
+      - server

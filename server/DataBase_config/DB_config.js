@@ -1,8 +1,9 @@
 import pkg from 'pg'; // ES module import for pg
 const { Pool } = pkg;
+import 'dotenv/config';
 
 const pool = new Pool({
-  connectionString: 'postgresql://postgres:Ela@911911@db.rezcixrdprtvpfkvbaxw.supabase.co:5432/postgres',
+  connectionString:process.env.DATABASE_URL,
   ssl: { rejectUnauthorized: false }, // needed for Supabase
 });
 
