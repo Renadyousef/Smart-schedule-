@@ -1,6 +1,7 @@
+#server docker file
 # 1. Use an official Node image *[recipe of the continer:before run]
 # *gives you a fresh Linux system with Node.js 18 preinstalled
-From node:18 
+FROM node:18 
 
 
 # 2. Set the working directory inside the container:where the app starts the run with

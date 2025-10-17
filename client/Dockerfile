@@ -1,3 +1,4 @@
+#docker file on client 
 # 1. Build a node base Image 
 
 FROM node:22 AS build
