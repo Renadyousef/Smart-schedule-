@@ -39,13 +39,14 @@ const app = express();
 //for deployment 
 app.use(
   cors({
-    origin: "https://smart-schedule-phi.vercel.app/", //  frontend's domain on Vercel
+    origin: "https://smart-schedule-phi.vercel.app", //  frontend's domain on Vercel
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true, 
   })
 );
 
+app.options('*', cors());
 
 
 app.use(express.json());
