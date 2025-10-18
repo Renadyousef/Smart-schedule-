@@ -2,12 +2,9 @@ import pkg from 'pg'; // ES module import for pg
 const { Pool } = pkg;
 import 'dotenv/config';
 
+// Use the single DATABASE_URL for Session Pooler
 const pool = new Pool({
-  user: process.env.POSTGRES_USER,
-  host: process.env.POSTGRES_HOST,
-  database: process.env.POSTGRES_DATABASE,
-  password: process.env.POSTGRES_PASSWORD,
-  port: 5432,
+  connectionString: process.env.SUPABASE_URL,
   ssl: { rejectUnauthorized: false },
 });
 
