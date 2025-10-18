@@ -3,11 +3,12 @@ const { Pool } = pkg;
 import 'dotenv/config';
 
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false },
-  host: "db.rezcixrdprtvpfkvbaxw.supabase.co", // ensure host
+  user: process.env.POSTGRES_USER,
+  host: process.env.POSTGRES_HOST,
+  database: process.env.POSTGRES_DATABASE,
+  password: process.env.POSTGRES_PASSWORD,
   port: 5432,
-  family: 4, // force IPv4
+  ssl: { rejectUnauthorized: false },
 });
 
-export default pool; // <--- default export
+export default pool; // keep default export
