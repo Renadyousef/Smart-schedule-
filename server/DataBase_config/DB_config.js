@@ -9,3 +9,5 @@ const pool = new Pool({
   port: 5432,
   family: 4, // force IPv4
 });
+
+export default pool; // <--- default export
