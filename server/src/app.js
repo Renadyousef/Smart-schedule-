@@ -35,7 +35,16 @@ const app = express();
 //   allowedHeaders: ["Content-Type", "Authorization"],
 //   credentials: true, // خليها true فقط إذا بتستخدمين كوكيز/معرّف جلسة
 // }));
-app.use(cors());//!for dev accept all port in deployment we have to spesfiy
+//app.use(cors());//!for dev accept all port in deployment we have to spesfiy
+//for deployment 
+app.use(
+  cors({
+    origin: "https://smart-schedule-phi.vercel.app", //  frontend's domain on Vercel
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization"],
+    credentials: true, 
+  })
+);
 
 
 
