@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
-import API from "../../api"; 
+import API from "../../API_continer"; 
 
 export default function DepartmentDropdown({ onSelect }) {
   const [departments, setDepartments] = useState([]);
