@@ -4,6 +4,7 @@ import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import Footer from "../Footer/Footer.jsx";
 //new code
+import API from "../../API_continer.js";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 function getUserHeaders() {
@@ -87,8 +88,8 @@ export default function AddIrregularStudent() {
     const run = async () => {
       setSearching(true);
       try {
-        const res = await axios.get(
-          `${API_BASE}/irregular/students/search`,
+        const res = await API.get(
+          `/irregular/students/search`,
           { params: { name: debouncedQuery, limit: 8 }, ...getUserHeaders() }
         );
         if (!cancel) {
@@ -131,7 +132,7 @@ export default function AddIrregularStudent() {
     setSuggestions([]);
     setOkMsg(""); setErrMsg("");
 
-    axios.get(`${API_BASE}/irregular/students/${item.studentId}`, getUserHeaders())
+    API.get(`/irregular/students/${item.studentId}`, getUserHeaders())
       .then((r) => {
         const lvl = r.data?.level;
         setLevelInput(lvl === null || lvl === undefined ? "" : String(lvl));
@@ -178,7 +179,7 @@ export default function AddIrregularStudent() {
 
     setSaving(true);
     try {
-      const res = await axios.post(`${API_BASE}/irregular`, payload, getUserHeaders());
+      const res = await API.post(`/irregular`, payload, getUserHeaders());
       const d = res.data?.data;
       setLevelInput(d?.level === null || d?.level === undefined ? "" : String(d.level));
       setPreviousCourses(d?.PreviousLevelCourses ?? null);
