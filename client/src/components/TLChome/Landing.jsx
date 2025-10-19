@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
-
+import API from "../../API_continer";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 /* ---------- helpers ---------- */
@@ -174,7 +174,7 @@ export default function Landing() {
   const fetchUnread = useCallback(async () => {
     if (!currentUserId) { setUnread(0); return; }
     try {
-      const r = await axios.get(`${API_BASE}/NotificationsSC/tlc/unread-count`, auth);
+      const r = await API.get(`/NotificationsSC/tlc/unread-count`, auth);
       setUnread(Number(r.data?.unread ?? 0));
     } catch {
       setUnread(0);
@@ -189,8 +189,8 @@ export default function Landing() {
         setErr("Missing user id (x-user-id). Please sign in again.");
         setList([]);
       } else {
-        const r = await axios.get(
-          `${API_BASE}/NotificationsSC/tlc`,
+        const r = await API.get(
+          `/NotificationsSC/tlc`,
           { ...auth, params: { limit: 30, offset: 0, unreadOnly: onlyUnread } }
         );
         if (r.data?.success) {
@@ -228,7 +228,7 @@ export default function Landing() {
     const ids = Array.from(selectedIds);
     if (!ids.length || !currentUserId) return;
     try {
-      await axios.post(`${API_BASE}/NotificationsSC/mark-read`, { ids }, auth);
+      await API.post(`/NotificationsSC/mark-read`, { ids }, auth);
       setList((prev) => prev.map((n) => (selectedIds.has(n.id) ? { ...n, is_read: true } : n)));
       setSelectedIds(new Set());
       await fetchUnread();
@@ -240,7 +240,7 @@ export default function Landing() {
   const clearAll = async () => {
     if (!currentUserId) return;
     try {
-      await axios.post(`${API_BASE}/NotificationsSC/clear-all`, {}, auth);
+      await API.post(`/NotificationsSC/clear-all`, {}, auth);
       setList((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setSelectedIds(new Set());
       await fetchUnread();
