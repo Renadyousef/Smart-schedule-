@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
-
+import API from "../../API_continer";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 /* ---------- tiny helper to show REAL server errors ---------- */
@@ -38,8 +38,8 @@ export default function RegistrarRequests() {
   const qparams = useMemo(() => (statusFilter ? { status: statusFilter } : {}), [statusFilter]);
 
   const reloadList = () =>
-    axios
-      .get(`${API_BASE}/registrarRequests/requests`, { params: qparams })
+    API
+      .get(`/registrarRequests/requests`, { params: qparams })
       .then((r) => setList(r.data || []));
 
   useEffect(() => {
@@ -54,7 +54,7 @@ export default function RegistrarRequests() {
     setErr("");
     setLoadingDetail(true);
     try {
-      const { data } = await axios.get(`${API_BASE}/registrarRequests/requests/${id}`);
+      const { data } = await API.get(`/registrarRequests/requests/${id}`);
       setActive(data);
     } catch (e) {
       setErr(formatServerError(e));
