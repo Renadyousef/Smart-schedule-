@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import axios from "axios";
 import Footer from "../Footer/Footer";
+import API from "../../API_continer";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
 const TIMES = [
@@ -46,8 +47,8 @@ export default function ViewSchedules() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    axios
-      .get("http://localhost:5000/Schudles/cources")
+    API
+      .get("/Schudles/cources")
       .then((res) => setCourses(Array.isArray(res.data) ? res.data : []))
       .catch((err) => {
         console.error("Error fetching courses:", err);
@@ -72,12 +73,12 @@ export default function ViewSchedules() {
 
     let url = "";
     if (courseFilter) {
-      url = `http://localhost:5000/Schudles/course?courseId=${courseFilter}`;
+      url = `/Schudles/course?courseId=${courseFilter}`;
     } else if (levelFilter) {
-      url = `http://localhost:5000/Schudles/level?level=${levelFilter}`;
+      url = `/Schudles/level?level=${levelFilter}`;
     }
 
-    axios
+    API
       .get(url)
       .then((res) => {
         const groups = Array.isArray(res.data.groups) ? res.data.groups : [];
@@ -101,8 +102,8 @@ export default function ViewSchedules() {
     setApproving(true);
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.patch(
-        `http://localhost:5000/Schudles/approve/${scheduleId}`,
+      const res = await API.patch(
+        `/Schudles/approve/${scheduleId}`,
         {},
         { headers: { Authorization: `Bearer ${token}` } }
       );
@@ -131,8 +132,8 @@ export default function ViewSchedules() {
     const scheduleId = group.scheduleId;
     try {
       const token = localStorage.getItem("token");
-      const res = await axios.post(
-        "http://localhost:5000/Schudles/feedback",
+      const res = await API.post(
+        "/Schudles/feedback",
         { comment, scheduleId },
         { headers: { Authorization: `Bearer ${token}` } }
       );
