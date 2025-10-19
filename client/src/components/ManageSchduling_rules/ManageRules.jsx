@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import axios from "axios";
+import API from "../../API_continer";
 
 export default function ManageRules() {
   const [rules, setRules] = useState([]);
@@ -18,7 +19,7 @@ export default function ManageRules() {
   useEffect(() => {
     const fetchRules = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/rules/display");
+        const response = await API.get("/rules/display");
         setRules(response.data);
       } catch (error) {
         console.error("Error fetching rules:", error);
@@ -65,7 +66,7 @@ export default function ManageRules() {
     try {
       if (editingRule) {
         // --- UPDATE EXISTING ---
-        await axios.put(`http://localhost:5000/rules/update/${editingRule.rule_id}`, newRule);
+        await API.put(`/rules/update/${editingRule.rule_id}`, newRule);
 
         setRules((prev) =>
           prev.map((rule) =>
@@ -76,7 +77,7 @@ export default function ManageRules() {
         setMessage("Rule updated successfully!");
       } else {
         // --- ADD NEW ---
-        const response = await axios.post("http://localhost:5000/rules/add", newRule);
+        const response = await API.post("/rules/add", newRule);
         setRules((prev) => [...prev, response.data]);
         setMessage("Rule added successfully!");
       }
@@ -109,7 +110,7 @@ export default function ManageRules() {
     if (!confirm) return;
 
     try {
-      await axios.delete(`http://localhost:5000/rules/delete/${id}`);
+      await API.delete(`/rules/delete/${id}`);
       setRules((prev) => prev.filter((rule) => rule.rule_id !== id));
       setMessage("Rule deleted successfully!");
       setTimeout(() => setMessage(""), 3000);
