@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import axios from "axios";
+import API from "../API_continer";
 
 export default function ManageElectives() {
   const [electivesData, setElectivesData] = useState([]);
@@ -10,7 +11,7 @@ export default function ManageElectives() {
   useEffect(() => {
     const fetchElectives = async () => {
       try {
-        const response = await axios.get("http://localhost:5000/Electives/view");
+        const response = await API.get("/Electives/view");
         // Map backend fields to JS-friendly keys
         const mappedData = response.data.map((e) => ({
           offerid: e.OfferID,
@@ -36,7 +37,7 @@ export default function ManageElectives() {
   // Handle approving an elective
   const handleApprove = async (offerID) => {
     try {
-      await axios.put(`http://localhost:5000/Electives/approve/${offerID}`);
+      await API.put(`/Electives/approve/${offerID}`);
       // ✅ Instantly update the status in UI
       setElectivesData((prevData) =>
         prevData.map((item) =>
