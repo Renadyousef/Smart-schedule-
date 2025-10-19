@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
-
+import API from '../../API_continer' // i wanna use this 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 /* ---------- helpers: robust registrarId resolver ---------- */
@@ -167,8 +167,8 @@ export default function RegistrarNotifications() {
     try {
       setLoading(true);
       setErr("");
-      const url = `${API_BASE}/Notifications/view?receiverId=${registrarId}&limit=30${onlyUnread ? "&isRead=false" : ""}`;
-      const res = await axios.get(url, auth);
+      const url = `/Notifications/view?receiverId=${registrarId}&limit=30${onlyUnread ? "&isRead=false" : ""}`;
+      const res = await API.get(url, auth);
       if (res.data?.success) {
         setList((res.data.notifications || []).map(mapRow));
       } else {
@@ -193,7 +193,7 @@ export default function RegistrarNotifications() {
 
   const markRead = async (id) => {
     try {
-      await axios.post(`${API_BASE}/Notifications/mark-read`, { ids: [id] }, auth);
+      await API.post(`/Notifications/mark-read`, { ids: [id] }, auth);
       setList((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
     } catch (e) {
       console.error("mark read failed:", e);
@@ -204,7 +204,7 @@ export default function RegistrarNotifications() {
   const markAllRead = async () => {
     try {
       if (!registrarId) return;
-      await axios.post(`${API_BASE}/Notifications/mark-all-read`, { receiverId: registrarId }, auth);
+      await API.post(`/Notifications/mark-all-read`, { receiverId: registrarId }, auth);
       setList(prev => prev.map(n => ({ ...n, is_read: true })));
     } catch (e) {
       console.error("mark all read failed:", e);
@@ -223,7 +223,7 @@ export default function RegistrarNotifications() {
     if (hasNeeded || !isCR || !n.entity_id) return n;
 
     try {
-      const res = await axios.get(`${API_BASE}/registrarRequests/requests/${n.entity_id}`, auth);
+      const res = await API.get(`/registrarRequests/requests/${n.entity_id}`, auth);
       const head = res.data || {};
       const enriched = {
         ...n,
