@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
+import API from "../../API_continer";
 
 export default function OfferElective() {
   const [electives, setElectives] = useState([]);
@@ -11,7 +12,7 @@ export default function OfferElective() {
     const fetchElectives = async () => {
       try {
         const token = localStorage.getItem("token");
-        const res = await axios.get("http://localhost:5000/offer/view", {
+        const res = await API.get("/offer/view", {
           headers: { Authorization: `Bearer ${token}` },
         });
         setElectives(res.data.electives || []);
@@ -60,8 +61,8 @@ export default function OfferElective() {
 
     try {
       const token = localStorage.getItem("token");
-      await axios.post(
-        "http://localhost:5000/offer/submit",
+      await API.post(
+        "/offer/submit",
         { electives: selectedElectives },
         { headers: { Authorization: `Bearer ${token}` } }
       );
