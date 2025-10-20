@@ -1,10 +1,8 @@
 // client/src/pages/Student/HomeLanding.jsx
 import React from "react";
 import { useNavigate } from "react-router-dom";
-import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
-
-const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+import API from "../../API_continer";
 
 /* ===== Helpers ===== */
 function coerceLevelFlexible(val) {
@@ -25,7 +23,15 @@ function coerceLevelFlexible(val) {
   }
   return null;
 }
-function readJSON(s) { try { return s ? JSON.parse(s) : null; } catch { return null; } }
+
+function readJSON(s) {
+  try {
+    return s ? JSON.parse(s) : null;
+  } catch {
+    return null;
+  }
+}
+
 function pickUserAndLevelFromStorage() {
   const keys = ["user", "profile", "account", "student"];
   const sources = [];
@@ -37,27 +43,74 @@ function pickUserAndLevelFromStorage() {
   for (const src of sources) {
     const u = src.obj;
     if (!u) continue;
-    const full = u?.name || [u?.firstName, u?.lastName].filter(Boolean).join(" ").trim();
-    if (full) { name = String(full).trim().split(/\s+/)[0]; break; }
+    const full =
+      u?.name || [u?.firstName, u?.lastName].filter(Boolean).join(" ").trim();
+    if (full) {
+      name = String(full).trim().split(/\s+/)[0];
+      break;
+    }
   }
-  const levelPaths = [(u)=>u?.level,(u)=>u?.student?.level,(u)=>u?.meta?.level,(u)=>u?.settings?.level,(u)=>u?.Student?.level];
+
+  const levelPaths = [
+    (u) => u?.level,
+    (u) => u?.student?.level,
+    (u) => u?.meta?.level,
+    (u) => u?.settings?.level,
+    (u) => u?.Student?.level,
+  ];
   let level = null;
   for (const src of sources) {
-    const u = src.obj; if (!u) continue;
-    for (const get of levelPaths) { const v = coerceLevelFlexible(get(u)); if (v !== null) { level = v; break; } }
+    const u = src.obj;
+    if (!u) continue;
+    for (const get of levelPaths) {
+      const v = coerceLevelFlexible(get(u));
+      if (v !== null) {
+        level = v;
+        break;
+      }
+    }
     if (level !== null) break;
   }
-  if (level === null) { const v = coerceLevelFlexible(loneLevel); if (v !== null) level = v; }
+  if (level === null) {
+    const v = coerceLevelFlexible(loneLevel);
+    if (v !== null) level = v;
+  }
   return { name, level };
 }
-function formatDate(iso) { try { const d = new Date(iso); return isNaN(d) ? "" : d.toLocaleString(); } catch { return ""; } }
+
+function formatDate(iso) {
+  try {
+    const d = new Date(iso);
+    return isNaN(d) ? "" : d.toLocaleString();
+  } catch {
+    return "";
+  }
+}
 
 /* ===== ستاتيك داتا (fallback فقط عند فشل API) ===== */
 const STATIC_NOTICES = [
-  { id: "static-1", title: "Schedule is available", message: "New schedule is available for your level.", createdAt: new Date().toISOString(), IsRead: false,
-    Full_name: null, Email: null, ScheduleLevel: null, GroupNo: null },
-  { id: "static-2", title: "Schedule is available", message: "Group list has been updated.", createdAt: new Date(Date.now() - 3600e3).toISOString(), IsRead: true,
-    Full_name: null, Email: null, ScheduleLevel: null, GroupNo: null },
+  {
+    id: "static-1",
+    title: "Schedule is available",
+    message: "New schedule is available for your level.",
+    createdAt: new Date().toISOString(),
+    IsRead: false,
+    Full_name: null,
+    Email: null,
+    ScheduleLevel: null,
+    GroupNo: null,
+  },
+  {
+    id: "static-2",
+    title: "Schedule is available",
+    message: "Group list has been updated.",
+    createdAt: new Date(Date.now() - 3600e3).toISOString(),
+    IsRead: true,
+    Full_name: null,
+    Email: null,
+    ScheduleLevel: null,
+    GroupNo: null,
+  },
 ];
 
 /* ===== لوحة الإشعارات ===== */
@@ -67,7 +120,10 @@ function StudentNotificationsPanel() {
   const [loading, setLoading] = React.useState(true);
   const [err, setErr] = React.useState("");
 
-  const unreadCount = React.useMemo(() => items.filter((n) => n.IsRead === false).length, [items]);
+  const unreadCount = React.useMemo(
+    () => items.filter((n) => n.IsRead === false).length,
+    [items]
+  );
 
   const filtered = React.useMemo(() => {
     return items.filter((n) => (onlyUnread ? n.IsRead === false : true));
@@ -77,7 +133,9 @@ function StudentNotificationsPanel() {
     setLoading(true);
     setErr("");
     try {
-      const res = await axios.get(`${API_BASE}/api/st-notifications`, { headers: { "Cache-Control": "no-cache" }});
+      const res = await API.get("/api/st-notifications", {
+        headers: { "Cache-Control": "no-cache" },
+      });
       const data = res?.data;
       const rows = Array.isArray(data?.rows) ? data.rows : [];
 
@@ -86,12 +144,8 @@ function StudentNotificationsPanel() {
         TitleDisplay: "Schedule is available",
         Message: r.message ?? r.Message ?? "You can now view the schedule.",
         CreatedAt: r.createdAt ?? r.CreatedAt ?? null,
-
-        // 👇 حالة القراءة من السيرفر
         IsRead: r.IsRead === true,
         ReadAt: r.ReadAt ?? null,
-
-        // ميتاداتا ديناميك
         Full_name: r.Full_name ?? null,
         Email: r.Email ?? null,
         ScheduleLevel: r.ScheduleLevel ?? null,
@@ -113,7 +167,9 @@ function StudentNotificationsPanel() {
         }));
       }
 
-      prepared.sort((a, b) => new Date(b.CreatedAt ?? 0) - new Date(a.CreatedAt ?? 0));
+      prepared.sort(
+        (a, b) => new Date(b.CreatedAt ?? 0) - new Date(a.CreatedAt ?? 0)
+      );
       setItems(prepared);
     } catch (e) {
       console.error(e);
@@ -137,13 +193,14 @@ function StudentNotificationsPanel() {
     }
   }, []);
 
-  React.useEffect(() => { fetchData(); }, [fetchData]);
-  React.useEffect(() => { /* فلتر unread محلي */ }, [onlyUnread]);
+  React.useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   async function markRead(id, isRead = true) {
     try {
-      await axios.put(`${API_BASE}/api/notifications/${id}/read`, { isRead });
-      await fetchData(); // refetch لضمان ثبات الحالة من DB
+      await API.put(`/api/notifications/${id}/read`, { isRead });
+      await fetchData();
     } catch (e) {
       console.error(e);
       alert("Failed to update read state.");
@@ -152,7 +209,7 @@ function StudentNotificationsPanel() {
 
   async function markAllRead() {
     try {
-      await axios.put(`${API_BASE}/api/st-notifications/mark-all-read`, {});
+      await API.put("/api/st-notifications/mark-all-read", {});
       await fetchData();
     } catch (e) {
       console.error(e);
@@ -169,7 +226,13 @@ function StudentNotificationsPanel() {
         </div>
         <div className="d-flex align-items-center gap-2">
           <span className="text-white-50">Unread</span>
-          <span className={`badge ${unreadCount > 0 ? "bg-danger" : "bg-secondary"}`}>{unreadCount}</span>
+          <span
+            className={`badge ${
+              unreadCount > 0 ? "bg-danger" : "bg-secondary"
+            }`}
+          >
+            {unreadCount}
+          </span>
         </div>
       </div>
 
@@ -191,7 +254,6 @@ function StudentNotificationsPanel() {
             </div>
           </div>
 
-          {/* نفس الديزاين: زرّي Refresh و Mark all as read */}
           <div className="col-12 col-sm-auto d-flex gap-2">
             <button className="btn btn-outline-secondary" onClick={fetchData}>
               Refresh
@@ -202,7 +264,6 @@ function StudentNotificationsPanel() {
           </div>
         </div>
 
-        {/* حالة تحميل/خطأ/فارغ */}
         {loading && (
           <div className="d-flex align-items-center gap-2 text-muted mb-3">
             <div className="spinner-border spinner-border-sm" role="status" />
@@ -211,10 +272,11 @@ function StudentNotificationsPanel() {
         )}
         {err && <div className="alert alert-warning">{err}</div>}
         {!loading && filtered.length === 0 && (
-          <div className="alert alert-light border text-muted mb-0">No notifications.</div>
+          <div className="alert alert-light border text-muted mb-0">
+            No notifications.
+          </div>
         )}
 
-        {/* قائمة الإشعارات */}
         <div className="list-group">
           {filtered.map((n) => (
             <div
@@ -224,16 +286,20 @@ function StudentNotificationsPanel() {
               <div className="me-3">
                 <div className="d-flex align-items-center gap-2">
                   <strong>{n.TitleDisplay || "Notification"}</strong>
-                  {n.IsRead === false && <span className="badge bg-primary">New</span>}
+                  {n.IsRead === false && (
+                    <span className="badge bg-primary">New</span>
+                  )}
                 </div>
 
-                {/* From + Level/Group + Email */}
                 <div className="text-muted small mt-1">
                   From: {n.Full_name || "Unknown"}
                   {Number.isFinite(n.ScheduleLevel) && (
                     <span className="ms-2">
                       (Level {n.ScheduleLevel}
-                      {typeof n.GroupNo !== "undefined" && n.GroupNo !== null ? `, Group ${n.GroupNo}` : ""}
+                      {typeof n.GroupNo !== "undefined" &&
+                      n.GroupNo !== null
+                        ? `, Group ${n.GroupNo}`
+                        : ""}
                       )
                     </span>
                   )}
@@ -271,7 +337,7 @@ function StudentNotificationsPanel() {
   );
 }
 
-/* ===== الصفحة الرئيسية + البوب-أب ===== */
+/* ===== الصفحة الرئيسية ===== */
 export default function HomeLanding() {
   const navigate = useNavigate();
   const [studentName, setStudentName] = React.useState("Student");
@@ -286,7 +352,8 @@ export default function HomeLanding() {
   React.useEffect(() => {
     recompute();
     const onStorage = (e) => {
-      if (!e || ["user","profile","account","student","level"].includes(e.key)) recompute();
+      if (!e || ["user", "profile", "account", "student", "level"].includes(e.key))
+        recompute();
     };
     const onFocus = () => recompute();
     window.addEventListener("storage", onStorage);
@@ -301,14 +368,12 @@ export default function HomeLanding() {
 
   return (
     <div className="student-home">
-      {/* Hero */}
       <section className="hero d-flex align-items-center text-center text-white">
         <div className="container">
           <h1 className="fw-bold mb-3">Welcome {studentName}</h1>
         </div>
       </section>
 
-      {/* Important Notification (قبل جدول الإشعارات) */}
       <section className="container my-3">
         <div className="alert alert-info mb-4" role="alert" style={{ borderRadius: 12 }}>
           <strong>Important Notification: </strong>
@@ -316,7 +381,6 @@ export default function HomeLanding() {
         </div>
       </section>
 
-      {/* Notifications Panel */}
       <section className="container my-5">
         <StudentNotificationsPanel />
       </section>
