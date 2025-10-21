@@ -1,9 +1,26 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { Container, Button, Spinner, Alert } from "react-bootstrap";
+import API from "../../API_continer"; // ✅ تمّت الإضافة
 
 const STORAGE_KEY = "sc.activeScheduleId";
 const EVENT_NAME = "sc-schedule-changed";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const fallback = axios.create({ baseURL: API_BASE });
+const http = API || fallback;
+
+function withAuth(config = {}) {
+  if (typeof window === "undefined") return config;
+  const token = window.localStorage.getItem("token");
+  if (!token) return config;
+  return {
+    ...config,
+    headers: {
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
 
 export default function ShareSchedule() {
   const [scheduleId, setScheduleId] = useState(() => {
@@ -15,16 +32,6 @@ export default function ShareSchedule() {
   });
   const [msg, setMsg] = useState(null);
   const [busyFor, setBusyFor] = useState(null);
-
-  const token = localStorage.getItem("token");
-  const api = useMemo(
-    () =>
-      axios.create({
-        baseURL: "http://localhost:5000/schedule",
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    [token]
-  );
 
   const syncSchedule = useCallback((value, broadcast = false) => {
     const numeric = value === null || value === undefined ? null : Number(value);
@@ -58,7 +65,7 @@ export default function ShareSchedule() {
     async function ensureSchedule() {
       if (scheduleId) return;
       try {
-        const { data } = await api.post("/init");
+        const { data } = await http.post("/schedule/init", null, withAuth());
         const nextId = data?.scheduleId ?? null;
         if (nextId) {
           syncSchedule(Number(nextId), true);
@@ -68,13 +75,17 @@ export default function ShareSchedule() {
       }
     }
     ensureSchedule();
-  }, [api, scheduleId]);
+  }, [scheduleId, syncSchedule]);
 
   const share = async () => {
     if (!scheduleId) return;
     setBusyFor("tlc");
     try {
-      await api.post(`/share/${scheduleId}`);
+      await http.post(
+        `/schedule/share/${scheduleId}`,
+        null,
+        withAuth()
+      );
       setMsg("✅ Schedule shared with TLC");
       setTimeout(() => setMsg(null), 2500);
     } finally {
