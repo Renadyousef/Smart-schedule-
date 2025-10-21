@@ -1,9 +1,26 @@
-import { useEffect, useMemo, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import { Container, Button, Spinner } from "react-bootstrap";
+import API from "../../API_continer"; // ✅ تمّت الإضافة
 
 const STORAGE_KEY = "sc.activeScheduleId";
 const EVENT_NAME = "sc-schedule-changed";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const fallback = axios.create({ baseURL: API_BASE });
+const http = API || fallback;
+
+function withAuth(config = {}) {
+  if (typeof window === "undefined") return config;
+  const token = window.localStorage.getItem("token");
+  if (!token) return config;
+  return {
+    ...config,
+    headers: {
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
 
 export default function InternalCourses() {
   const [internalRows, setInternalRows] = useState([]);
@@ -17,16 +34,6 @@ export default function InternalCourses() {
     const parsed = Number(stored);
     return Number.isNaN(parsed) ? null : parsed;
   });
-
-  const token = localStorage.getItem("token");
-  const api = useMemo(
-    () =>
-      axios.create({
-        baseURL: "http://localhost:5000/schedule",
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    [token]
-  );
 
   const syncSchedule = useCallback((value, broadcast = false) => {
     const numeric = value === null || value === undefined ? null : Number(value);
@@ -60,7 +67,7 @@ export default function InternalCourses() {
     async function init() {
       if (scheduleId) return;
       try {
-        const { data } = await api.post("/init");
+        const { data } = await http.post("/schedule/init", null, withAuth());
         const nextId = data?.scheduleId ?? null;
         if (nextId) {
           syncSchedule(Number(nextId), true);
@@ -70,27 +77,33 @@ export default function InternalCourses() {
       }
     }
     init();
-  }, [api, scheduleId]);
+  }, [scheduleId, syncSchedule]);
 
-  const loadInternalAuto = async (id) => {
-    if (!id) {
-      setInternalRows([]);
-      setDetectedLevel(null);
-      return;
-    }
-    setBusy(true);
-    try {
-      const { data } = await api.get(`/internal-courses/auto/${id}`);
-      setDetectedLevel(data.level ?? null);
-      setInternalRows(data.items ?? []);
-      if (typeof data.created === "number" && data.created > 0) {
-        setMsg(`Prepared ${data.created} internal sections (level ${data.level ?? "?"}).`);
-        setTimeout(() => setMsg(null), 3000);
+  const loadInternalAuto = useCallback(
+    async (id) => {
+      if (!id) {
+        setInternalRows([]);
+        setDetectedLevel(null);
+        return;
       }
-    } finally {
-      setBusy(false);
-    }
-  };
+      setBusy(true);
+      try {
+        const { data } = await http.get(
+          `/schedule/internal-courses/auto/${id}`,
+          withAuth()
+        );
+        setDetectedLevel(data.level ?? null);
+        setInternalRows(data.items ?? []);
+        if (typeof data.created === "number" && data.created > 0) {
+          setMsg(`Prepared ${data.created} internal sections (level ${data.level ?? "?"}).`);
+          setTimeout(() => setMsg(null), 3000);
+        }
+      } finally {
+        setBusy(false);
+      }
+    },
+    []
+  );
 
   useEffect(() => {
     if (scheduleId) {
@@ -101,13 +114,17 @@ export default function InternalCourses() {
       setInternalRows([]);
       setDetectedLevel(null);
     }
-  }, [scheduleId]);
+  }, [scheduleId, loadInternalAuto]);
 
   const generate = async () => {
     if (!scheduleId) return;
     setBusy(true);
     try {
-      await api.post(`/generate/${scheduleId}`);
+      await http.post(
+        `/schedule/generate/${scheduleId}`,
+        null,
+        withAuth()
+      );
       await loadInternalAuto(scheduleId);
       setMsg("✅ Schedule generated.");
       setTimeout(() => setMsg(null), 2000);
