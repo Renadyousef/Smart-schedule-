@@ -3,6 +3,7 @@ import React from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import axios from "axios";
+import API from "../../API_continer";
 
 /**
  * SC Profile (EN) — بدون هيدر/فوتر
@@ -17,6 +18,9 @@ api.interceptors.request.use((config) => {
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+// نفضّل الـ API المشترك إن وُجد (بدون حذف الشيفرة القديمة)
+const http = API || api;
 
 export default function SCProfileEN() {
   const [user, setUser] = React.useState({
@@ -42,7 +46,7 @@ export default function SCProfileEN() {
         const stored = JSON.parse(localStorage.getItem("user") || "null");
         if (!stored?.id) throw new Error("No user in localStorage");
 
-        const { data } = await api.get(`/api/profile/${stored.id}`);
+        const { data } = await http.get(`/api/profile/${stored.id}`);
         const fullName =
           [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
           data.name ||
@@ -73,8 +77,12 @@ export default function SCProfileEN() {
               email: data.email ?? ls.email,
               role: data.role ?? ls.role,
               departmentId: data.departmentId ?? ls.departmentId ?? null,
-              department: (data?.department?.name || data?.department || ls.department || null),
-              level: (data.level ?? ls.level ?? null),
+              department:
+                data?.department?.name ||
+                data?.department ||
+                ls.department ||
+                null,
+              level: data.level ?? ls.level ?? null,
             })
           );
         } catch {}
@@ -82,8 +90,8 @@ export default function SCProfileEN() {
         console.error("Fetch profile failed:", err?.response?.data || err);
         setNotice(
           err?.response?.data?.message ||
-          err?.response?.data?.error ||
-          "Failed to load profile."
+            err?.response?.data?.error ||
+            "Failed to load profile."
         );
         setTimeout(() => setNotice(""), 3000);
       }
@@ -137,7 +145,7 @@ export default function SCProfileEN() {
       const [firstName, ...rest] = form.name.trim().split(/\s+/);
       const lastName = rest.join(" ") || "-";
 
-      const { data } = await api.put(`/api/profile/${stored.id}`, {
+      const { data } = await http.put(`/api/profile/${stored.id}`, {
         firstName,
         lastName,
         email: form.email.trim(),
@@ -145,7 +153,11 @@ export default function SCProfileEN() {
         level: form.level === "" ? null : Number(form.level),
       });
 
-      const updated = { ...user, name: form.name.trim(), email: form.email.trim() };
+      const updated = {
+        ...user,
+        name: form.name.trim(),
+        email: form.email.trim(),
+      };
       setUser(updated);
 
       // تحديث بسيط لـ localStorage
@@ -165,8 +177,10 @@ export default function SCProfileEN() {
       try {
         const ls2 = JSON.parse(localStorage.getItem("user") || "{}");
         const nextLevel =
-          form.level === "" || form.level === null || form.level === undefined
-            ? (ls2.level ?? null)
+          form.level === "" ||
+          form.level === null ||
+          form.level === undefined
+            ? ls2.level ?? null
             : Number(form.level);
         localStorage.setItem(
           "user",
@@ -178,7 +192,7 @@ export default function SCProfileEN() {
       } catch {}
 
       // (اختياري آمن) جلب سريع لتأكيد المستوى من السيرفر
-      api
+      http
         .get(`/api/profile/${stored.id}`)
         .then(({ data }) => {
           try {
@@ -201,8 +215,8 @@ export default function SCProfileEN() {
       console.error("Update profile failed:", err?.response?.data || err);
       setNotice(
         err?.response?.data?.message ||
-        err?.response?.data?.error ||
-        "Failed to save changes."
+          err?.response?.data?.error ||
+          "Failed to save changes."
       );
       setTimeout(() => setNotice(""), 3000);
     }
@@ -214,23 +228,34 @@ export default function SCProfileEN() {
       <section className="hero area-constrained hero-top-pad">
         <div className="hero-inner">
           <div className="avatar-wrap">
-            <div className="avatar-fallback"><span>{initials}</span></div>
+            <div className="avatar-fallback">
+              <span>{initials}</span>
+            </div>
             <span className="avatar-ring" aria-hidden />
           </div>
 
-        <div className="identity">
+          <div className="identity">
             <h1 className="name">{user.name}</h1>
             <p className="email">{user.email}</p>
 
             <div className="chips">
-              <span className="chip chip-role" title="Role">{user.role}</span>
-              <span className="chip chip-dept" title="Department">{user.department}</span>
+              <span className="chip chip-role" title="Role">
+                {user.role}
+              </span>
+              <span className="chip chip-dept" title="Department">
+                {user.department}
+              </span>
             </div>
           </div>
         </div>
 
         {/* wave */}
-        <svg className="wave" viewBox="0 0 1440 120" preserveAspectRatio="none" aria-hidden="true">
+        <svg
+          className="wave"
+          viewBox="0 0 1440 120"
+          preserveAspectRatio="none"
+          aria-hidden="true"
+        >
           <defs>
             <linearGradient id="scGrad" x1="0%" y1="0%" x2="100%" y2="0%">
               <stop offset="0%" stopColor="#c7d2fe" />
@@ -238,13 +263,18 @@ export default function SCProfileEN() {
               <stop offset="100%" stopColor="#3b82f6" />
             </linearGradient>
           </defs>
-          <path d="M0,64 C240,100 480,40 720,64 C960,88 1200,76 1440,60 L1440,160 L0,160 Z" fill="url(#scGrad)"/>
+          <path
+            d="M0,64 C240,100 480,40 720,64 C960,88 1200,76 1440,60 L1440,160 L0,160 Z"
+            fill="url(#scGrad)"
+          />
         </svg>
       </section>
 
       {/* Card */}
       <main className="area-constrained main-pad">
-        {notice && <div className="alert alert-primary shadow-sm soft-alert">{notice}</div>}
+        {notice && (
+          <div className="alert alert-primary shadow-sm soft-alert">{notice}</div>
+        )}
 
         <div className="glass-card">
           <h2 className="card-title">Profile details</h2>
@@ -252,38 +282,60 @@ export default function SCProfileEN() {
             <div className="col-12 col-md-6">
               <label className="form-label">Name</label>
               <input
-                className={`form-control form-elev ${errors.name ? "is-invalid" : ""}`}
+                className={`form-control form-elev ${
+                  errors.name ? "is-invalid" : ""
+                }`}
                 value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
                 disabled={!isEditing}
                 readOnly={!isEditing}
                 placeholder="Your full name"
               />
-              {errors.name && <div className="invalid-feedback d-block">{errors.name}</div>}
+              {errors.name && (
+                <div className="invalid-feedback d-block">{errors.name}</div>
+              )}
             </div>
 
             <div className="col-12 col-md-6">
               <label className="form-label">Email</label>
               <input
-                className={`form-control form-elev ${errors.email ? "is-invalid" : ""}`}
+                className={`form-control form-elev ${
+                  errors.email ? "is-invalid" : ""
+                }`}
                 value={form.email}
-                onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, email: e.target.value }))
+                }
                 disabled={!isEditing}
                 readOnly={!isEditing}
                 placeholder="name@example.com"
                 inputMode="email"
               />
-              {errors.email && <div className="invalid-feedback d-block">{errors.email}</div>}
+              {errors.email && (
+                <div className="invalid-feedback d-block">{errors.email}</div>
+              )}
             </div>
 
             <div className="col-12 col-md-6">
               <label className="form-label">Role</label>
-              <input className="form-control form-readonly" value={user.role} disabled readOnly />
+              <input
+                className="form-control form-readonly"
+                value={user.role}
+                disabled
+                readOnly
+              />
             </div>
 
             <div className="col-12 col-md-6">
               <label className="form-label">Department</label>
-              <input className="form-control form-readonly" value={user.department} disabled readOnly />
+              <input
+                className="form-control form-readonly"
+                value={user.department}
+                disabled
+                readOnly
+              />
             </div>
 
             {/* NEW: Level (1–8) للطالب */}
@@ -293,12 +345,16 @@ export default function SCProfileEN() {
                 <select
                   className="form-select form-elev"
                   value={form.level}
-                  onChange={(e) => setForm((f) => ({ ...f, level: e.target.value }))}
+                  onChange={(e) =>
+                    setForm((f) => ({ ...f, level: e.target.value }))
+                  }
                   disabled={!isEditing}
                 >
                   <option value="">-- Select Level --</option>
                   {[...Array(8)].map((_, i) => (
-                    <option key={i + 1} value={i + 1}>{i + 1}</option>
+                    <option key={i + 1} value={i + 1}>
+                      {i + 1}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -306,11 +362,25 @@ export default function SCProfileEN() {
 
             <div className="col-12 d-flex flex-wrap justify-content-end gap-2 mt-2">
               {!isEditing ? (
-                <button type="button" className="btn btn-primary btn-lg px-4" onClick={onEdit}>Edit</button>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-lg px-4"
+                  onClick={onEdit}
+                >
+                  Edit
+                </button>
               ) : (
                 <>
-                  <button type="button" className="btn btn-outline-secondary btn-lg" onClick={onCancel}>Cancel</button>
-                  <button type="submit" className="btn btn-primary btn-lg px-4">Save</button>
+                  <button
+                    type="button"
+                    className="btn btn-outline-secondary btn-lg"
+                    onClick={onCancel}
+                  >
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary btn-lg px-4">
+                    Save
+                  </button>
                 </>
               )}
             </div>
