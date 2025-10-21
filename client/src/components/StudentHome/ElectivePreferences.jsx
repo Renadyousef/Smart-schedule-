@@ -1,6 +1,7 @@
 // src/components/StudentHome/ElectivePreferences.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
+import API from "../../API_continer";
 
 /* ============ Categories (Labels) ============ */
 const CATEGORY_META = {
@@ -115,15 +116,16 @@ export default function ElectivePreferences() {
   const [loadingHist, setLoadingHist] = useState(false);
   const [histError, setHistError] = useState("");
 
-  async function fetchHistory(studentId, token) {
+  const authCfg = (() => {
+    const t = getAuthToken();
+    return t ? { headers: { Authorization: `Bearer ${t}` } } : {};
+  })();
+
+  async function fetchHistory(studentId) {
     try {
       setLoadingHist(true);
       setHistError("");
-      const res = await fetch(`http://localhost:5000/students/${studentId}/preferences/history`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
+      const { data } = await API.get(`/students/${studentId}/preferences/history`, authCfg);
       setHistory(Array.isArray(data) ? data : []);
     } catch (e) {
       console.error(e);
@@ -163,8 +165,6 @@ export default function ElectivePreferences() {
   // Fetch student level + history (لا نهيّئ reasons/notes من DB)
   useEffect(() => {
     const studentId = getUserIdFromLocalStorage();
-    const token = getAuthToken();
-
     if (!studentId) {
       console.warn("[Electives] No StudentID in localStorage.user.{id|_id|UserID}");
       return;
@@ -173,11 +173,7 @@ export default function ElectivePreferences() {
     (async () => {
       try {
         console.debug("[Electives] fetching student info…", { studentId });
-        const res = await fetch(`http://localhost:5000/students/${studentId}`, {
-          headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const { data } = await API.get(`/students/${studentId}`, authCfg);
 
         // normalize level only
         let lv = data?.level ?? "";
@@ -190,12 +186,12 @@ export default function ElectivePreferences() {
         setLevel(lv);
 
         // fetch history
-        await fetchHistory(studentId, token);
+        await fetchHistory(studentId);
       } catch (e) {
         console.error(e);
       }
     })();
-  }, []);
+  }, []); // هذي المرة الأولى فقط
 
   // Fetch courses list
   useEffect(() => {
@@ -204,12 +200,10 @@ export default function ElectivePreferences() {
         setLoading(true);
         setError("");
         console.debug("[Electives] fetching courses…");
-        const res  = await fetch("http://localhost:5000/courses");
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = await res.json();
+        const { data } = await API.get("/courses");
 
         const buckets = { islamic: [], mathscience: [], cs_it: [] };
-        data.forEach(row => {
+        (Array.isArray(data) ? data : []).forEach(row => {
           const item = {
             code: row.course_code,
             name: row.course_name,
@@ -271,7 +265,6 @@ export default function ElectivePreferences() {
     e.preventDefault();
 
     const studentId = getUserIdFromLocalStorage();
-    const token = getAuthToken();
     if (!studentId) {
       alert("Cannot submit: missing StudentID in localStorage.user");
       return;
@@ -298,19 +291,10 @@ export default function ElectivePreferences() {
     console.debug("SUBMIT ELECTIVES →", { studentId, payload });
 
     try {
-      const res = await fetch(`http://localhost:5000/students/${studentId}/preferences`, {
-        method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(payload),
+      await API.put(`/students/${studentId}/preferences`, payload, {
+        ...authCfg,
+        headers: { "Content-Type": "application/json", ...(authCfg.headers || {}) },
       });
-      if (!res.ok) {
-        const t = await res.text();
-        throw new Error(`HTTP ${res.status} – ${t}`);
-      }
-      await res.json();
 
       // toast
       const toast = document.getElementById("submitToast");
@@ -324,7 +308,7 @@ export default function ElectivePreferences() {
       resetAll();
 
       // refresh history after save (عرض فقط)
-      await fetchHistory(studentId, token);
+      await fetchHistory(studentId);
     } catch (err) {
       console.error(err);
       alert("Failed to save preferences. See console for details.");
