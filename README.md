@@ -63,8 +63,6 @@ OPENAI_API_KEY= **generate your own key, we can't commit any OpenAI keys, they g
 
 DATABASE_URL= **our private url connection**
 
-Any additional config
-such as the local port on the server..
 ---
 
 ## Demo Credentials
