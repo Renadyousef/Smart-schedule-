@@ -377,7 +377,7 @@ export default function HomeLanding() {
       <section className="container my-3">
         <div className="alert alert-info mb-4" role="alert" style={{ borderRadius: 12 }}>
           <strong>Important Notification: </strong>
-          Elective offerings close on <strong>Oct 15</strong>. Please submit before the deadline.
+          Elective offerings close on <strong>Oct 25</strong>. Please submit before the deadline.
         </div>
       </section>
 
