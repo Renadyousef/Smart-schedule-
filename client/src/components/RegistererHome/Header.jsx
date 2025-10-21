@@ -1,6 +1,6 @@
 // RegistrarHeader.jsx
+import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
-import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
@@ -16,25 +16,10 @@ function initialsFrom(nameLike, fallback = "RG") {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function RegistrarHeader({
-  onSignOut,
-  redirectAfter = "/signup",
-}) {
+export default function RegistrarHeader({ onLogout }) {
   const navigate = useNavigate();
   const [showImg, setShowImg] = useState(true);
 
-  // --- auth info from localStorage ---
-  const token = useMemo(() => localStorage.getItem("token") || "", []);
-  const userId = useMemo(
-    () => Number(localStorage.getItem("userId") || 0),
-    []
-  );
-  const headers = useMemo(
-    () => (token ? { Authorization: `Bearer ${token}` } : {}),
-    [token]
-  );
-
-  // --- display name / initials ---
   const displayName = useMemo(
     () =>
       localStorage.getItem("fullName") ||
@@ -45,43 +30,40 @@ export default function RegistrarHeader({
   );
   const initials = useMemo(() => initialsFrom(displayName, "RG"), [displayName]);
 
-  // --- unread counter for Notifications tab ---
+  const token = useMemo(() => localStorage.getItem("token") || "", []);
+  const userId = useMemo(() => Number(localStorage.getItem("userId") || 0), []);
+  const headers = useMemo(
+    () => (token ? { Authorization: `Bearer ${token}` } : {}),
+    [token]
+  );
   const [unreadCount, setUnreadCount] = useState(0);
+
   async function loadCounts() {
     if (!userId) return;
     try {
       const url = `${API_BASE}/Notifications/counts?receiverId=${userId}`;
       const res = await axios.get(url, { headers });
       setUnreadCount(Number(res.data?.unread || 0));
-    } catch (e) {
-      // سكون صامت، ما نزعج المستخدم
-      // console.error("loadCounts error", e);
-    }
+    } catch {}
   }
+
   useEffect(() => {
     loadCounts();
-    const id = setInterval(loadCounts, 30000); // update every 30s
+    const id = setInterval(loadCounts, 30000);
     return () => clearInterval(id);
-  }, []); // أول مرّة فقط
+  }, []);
 
   const goProfile = () => navigate("/account");
 
-  const handleSignOut = async (e) => {
-    e?.preventDefault?.();
-    e?.stopPropagation?.();
-
-    try {
-      localStorage.removeItem("token");
-      localStorage.removeItem("userId");
-      localStorage.removeItem("fullName");
-      localStorage.removeItem("userName");
-      localStorage.removeItem("email");
-      localStorage.setItem("logout_broadcast", String(Date.now()));
-      if (typeof onSignOut === "function") await Promise.resolve(onSignOut());
-    } finally {
-      window.location.replace(redirectAfter);
-    }
-  };
+  const LinkEl = ({ to, children, end }) => (
+    <NavLink
+      className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
+      to={to}
+      end={end}
+    >
+      {children}
+    </NavLink>
+  );
 
   return (
     <nav className="navbar navbar-expand-lg bg-body-tertiary">
@@ -104,13 +86,11 @@ export default function RegistrarHeader({
 
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
           <div className="navbar-nav me-auto">
-            <NavLink className="nav-link" to="/">Home</NavLink>
-            <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
-            <NavLink className="nav-link" to="/registrar/irregular/add">Irregular Students</NavLink>
-
-            {/* === New: Notifications tab === */}
+            <LinkEl to="/" end>Home</LinkEl>
+            <LinkEl to="/registrar/electives">Offer Electives</LinkEl>
+            <LinkEl to="/registrar/irregular">Irregular Students</LinkEl>
             <NavLink className="nav-link position-relative" to="/registrar/notifications">
-              <span className="me-1"></span> Notifications
+              Notifications
               {unreadCount > 0 && (
                 <span
                   className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
@@ -159,14 +139,9 @@ export default function RegistrarHeader({
               </li>
               <li><hr className="dropdown-divider" /></li>
               <li>
-                <a
-                  href={redirectAfter}
-                  className="dropdown-item text-danger"
-                  onClickCapture={handleSignOut}
-                  onClick={(e) => e.preventDefault()}
-                >
-                  Log Out
-                </a>
+                <button className="dropdown-item text-danger" onClick={onLogout}>
+                  Log out
+                </button>
               </li>
             </ul>
           </div>
