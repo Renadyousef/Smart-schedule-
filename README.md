@@ -34,16 +34,16 @@ It automatically generates course schedules based on predefined rules and commit
 
 ---
 ## Environment Variables
-# JWT secret for authentication
+
 JWT_SECRET=
 
-# OpenAI API key for AI schedule generation
+
 OPENAI_API_KEY=
 
-# Database URL (Supabase connection)
+
 DATABASE_URL=
 
-# Any additional config
+Any additional config
 such as the local port on the server..
 
 ## Development Setup (Docker)
