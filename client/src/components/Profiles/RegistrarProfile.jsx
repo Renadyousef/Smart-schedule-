@@ -1,18 +1,14 @@
-// src/components/Profiles/RegistrarProfile.jsx
+// client/src/components/Profiles/RegistrarProfile.jsx
 import React from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import axios from "axios";
+import API from "../../API_continer";
 
-/**
- * Registrar Profile — نفس تصميم TLCProfile
- * - GET /api/profile/:id  لجلب البيانات
- * - PUT /api/profile/:id  لتحديث الاسم/الإيميل
- * - يعتمد على localStorage: { token, user:{ id, ... } }
- * - الأفاتار ثابت بحرف "R" (نتجاهل أي avatar من الـ API)
- */
+import SC_Header from "../SCHome/Header.jsx";
+import Footer from "../Footer/Footer.jsx";
 
-// Axios instance مع Authorization تلقائيًا
+
 const api = axios.create({ baseURL: "http://localhost:5000" });
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
@@ -20,7 +16,13 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
-export default function RegistrarProfile() {
+
+const http = API || api;
+
+export default function RegistrarProfile({
+  includeHeader = false,
+  includeFooter = false,
+}) {
   const [user, setUser] = React.useState({
     name: "Registrar User",
     email: "registrar@example.com",
@@ -35,13 +37,14 @@ export default function RegistrarProfile() {
 
   // جلب البروفايل من الباك-إند عند التحميل
   React.useEffect(() => {
-    (async () => {
+    async function fetchProfile() {
       try {
         const stored = JSON.parse(localStorage.getItem("user") || "null");
         if (!stored?.id) throw new Error("No user in localStorage");
 
-        const { data } = await api.get(`/api/profile/${stored.id}`);
-        // نتوقع: { id, name?, firstName?, lastName?, email, role, department: { name } }
+
+        const { data } = await http.get(`/api/profile/${stored.id}`);
+
         const fullName =
           [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
           data.name ||
@@ -60,7 +63,8 @@ export default function RegistrarProfile() {
         setNotice("Failed to load profile.");
         setTimeout(() => setNotice(""), 3000);
       }
-    })();
+    }
+    fetchProfile();
   }, []);
 
   React.useEffect(() => {
@@ -69,7 +73,8 @@ export default function RegistrarProfile() {
 
   function validate() {
     const e = { name: "", email: "" };
-    if (!form.name.trim() || form.name.trim().length < 2) e.name = "Name must be at least 2 characters.";
+    if (!form.name.trim() || form.name.trim().length < 2)
+      e.name = "Name must be at least 2 characters.";
     const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/i;
     if (!emailRe.test(form.email.trim())) e.email = "Enter a valid email address.";
     setErrors(e);
@@ -80,7 +85,6 @@ export default function RegistrarProfile() {
     setNotice("");
     setIsEditing(true);
   }
-
   function onCancel() {
     setForm({ name: user.name, email: user.email });
     setErrors({ name: "", email: "" });
@@ -101,7 +105,7 @@ export default function RegistrarProfile() {
       const [firstName, ...rest] = form.name.trim().split(/\s+/);
       const lastName = rest.join(" ") || "-";
 
-      await api.put(`/api/profile/${stored.id}`, {
+      await http.put(`/api/profile/${stored.id}`, {
         firstName,
         lastName,
         email: form.email.trim(),
@@ -131,8 +135,24 @@ export default function RegistrarProfile() {
 
   return (
     <div className="sc-profile" dir="ltr">
-      {/* Hero (نفس TLCProfile) */}
-      <section className="hero area-constrained">
+      {/* هيدر اختياري */}
+      {includeHeader && (
+        <div className="sticky-top backdrop-wrap">
+          <SC_Header
+            onLogout={() => {
+              localStorage.removeItem("token");
+              localStorage.removeItem("user");
+              location.reload();
+            }}
+            userName={user.name}
+            email={user.email}
+            avatarUrl=""
+          />
+        </div>
+      )}
+
+      {/* Hero */}
+      <section className={`hero area-constrained ${includeHeader ? "" : "hero-top-pad"}`}>
         <div className="hero-inner">
           <div className="avatar-wrap">
             {/* ✅ Avatar ثابت: حرف R دائمًا */}
@@ -222,7 +242,10 @@ export default function RegistrarProfile() {
         </div>
       </main>
 
-      {/* نفس ستايل TLCProfile */}
+      {/* فوتر اختياري */}
+      {includeFooter && <Footer />}
+
+      {/* نفس ستايل TLCProfile/SC */}
       <style>{`
         :root{
           --page-bg:#f3f5f8;
@@ -240,7 +263,9 @@ export default function RegistrarProfile() {
         body{ background:var(--page-bg); }
         .sc-profile{ color:var(--ink); min-height:100vh; display:flex; flex-direction:column; }
         .area-constrained{ width:min(var(--maxw),100%); margin-inline:auto; padding-inline:clamp(12px,2vw,24px); }
+        .backdrop-wrap{ backdrop-filter:saturate(120%) blur(8px); background:rgba(255,255,255,.65); border-bottom:1px solid rgba(148,163,184,.2); z-index:1030; }
         .hero{ position:relative; padding-top:clamp(56px,7vh,72px); }
+        .hero-top-pad{ padding-top:clamp(24px,5vh,40px); }
         .hero-inner{ display:flex; align-items:center; gap:clamp(16px,3vw,28px); padding-block:clamp(22px,3.5vh,34px); }
         .avatar-wrap{ position:relative; width:clamp(84px,14vw,120px); height:clamp(84px,14vw,120px); }
         .avatar-fallback{ width:100%; height:100%; border-radius:50%; display:flex; align-items:center; justify-content:center;
@@ -262,11 +287,12 @@ export default function RegistrarProfile() {
         .glass-card{ background:var(--card); border-radius:var(--radius); box-shadow:var(--shadow-lg); border:1px solid rgba(148,163,184,.22); backdrop-filter:blur(var(--glass-blur)); padding:clamp(16px,2vw,22px); }
         .card-title{ font-size:16px; font-weight:800; margin-bottom:8px; letter-spacing:.3px; }
         .form-label{ font-weight:700; color:var(--ink); }
-        .form-elev{ border-radius:12px; border-color:#e2e8f0; background:#fff; box-shadow:var(--shadow-sm); transition: box-shadow .2s, border-color .2s, transform .06s; }
+        .form-elev{ border-radius:12px; border-color:#e2e8f0; background:#fff; box-shadow:var(--shadow-sm); transition: box-shadow .2s، border-color .2s، transform .06s; }
         .form-elev:focus{ border-color:var(--ring); box-shadow:0 0 0 4px rgba(96,165,250,.2); }
         .form-readonly{ background:#f8fafc; border-color:#e2e8f0; border-radius:12px; }
         .btn.btn-primary{ --bs-btn-bg:var(--blue); --bs-btn-border-color:var(--blue); --bs-btn-hover-bg:#2563eb; --bs-btn-hover-border-color:#2563eb; --bs-btn-focus-shadow-rgb:96,165,250; border-radius:12px; font-weight:700; }
         .btn-outline-secondary{ border-radius:12px; font-weight:700; }
+        .dropdown-menu{ z-index:1080; }
       `}</style>
     </div>
   );
