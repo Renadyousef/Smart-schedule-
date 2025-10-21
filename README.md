@@ -63,6 +63,7 @@ OPENAI_API_KEY= **generate your own key, we can't commit any OpenAI keys, they g
 
 DATABASE_URL= **our private url connection**
 
+*** By the way, the .env file is required to be on the root level
 ---
 
 ## Demo Credentials
