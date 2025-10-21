@@ -38,18 +38,38 @@ const app = express();
 //app.use(cors());//!for dev accept all port in deployment we have to spesfiy
 //for deployment 
 const allowedOrigins = [
-  "https://smart-schedule-phi.vercel.app", // Vercel
-  "http://localhost:3000"                   // local client container
+  "https://smart-schedule-phi.vercel.app", // frontend
+  "http://localhost:3000", // local
 ];
+
+app.use((req, res, next) => {
+  // Handle weird redirects or double slashes BEFORE CORS
+  if (req.originalUrl.includes("//")) {
+    const cleanUrl = req.originalUrl.replace(/\/{2,}/g, "/");
+    return res.redirect(308, cleanUrl);
+  }
+  next();
+});
 
 app.use(
   cors({
-    origin:allowedOrigins, //  frontend's domain on Vercel
+    origin: function (origin, callback) {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization","X-User-Id", "Cache-Control"],
-    credentials: true, 
+    allowedHeaders: ["Content-Type", "Authorization", "X-User-Id", "Cache-Control"],
+    credentials: true,
+    preflightContinue: false,
+    optionsSuccessStatus: 204,
   })
 );
+
+// 👇 very important: respond to preflight requests before any routes
+app.options("*", cors());
 
 
 
