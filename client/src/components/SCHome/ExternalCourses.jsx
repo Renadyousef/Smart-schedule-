@@ -1,6 +1,7 @@
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
 import axios from "axios";
-import { Container, Row, Col, Button, Form, Spinner, Alert } from "react-bootstrap";
+import { Container, Row, Col, Button, Form, Spinner } from "react-bootstrap";
+import API from "../../API_continer"; // ✅ تمّت الإضافة
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
 const LECTURE_MULTI_DAY_VALUE = "Sunday-Tuesday-Thursday";
@@ -8,6 +9,22 @@ const LECTURE_MULTI_DAY_DAYS = ["Sunday", "Tuesday", "Thursday"];
 const LECTURE_DAY_OPTIONS = [...DAYS, LECTURE_MULTI_DAY_VALUE];
 const STORAGE_KEY = "sc.activeScheduleId";
 const EVENT_NAME = "sc-schedule-changed";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const fallback = axios.create({ baseURL: API_BASE });
+const http = API || fallback;
+
+function withAuth(config = {}) {
+  if (typeof window === "undefined") return config;
+  const token = window.localStorage.getItem("token");
+  if (!token) return config;
+  return {
+    ...config,
+    headers: {
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
 
 const initialForm = {
   courseCode: "",
@@ -31,16 +48,6 @@ export default function ExternalCourses() {
     const parsed = Number(stored);
     return Number.isNaN(parsed) ? null : parsed;
   });
-
-  const token = localStorage.getItem("token");
-  const api = useMemo(
-    () =>
-      axios.create({
-        baseURL: "http://localhost:5000/schedule",
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    [token]
-  );
 
   const syncSchedule = useCallback((value, broadcast = false) => {
     const numeric = value === null || value === undefined ? null : Number(value);
@@ -74,7 +81,7 @@ export default function ExternalCourses() {
     async function ensureSchedule() {
       if (scheduleId) return;
       try {
-        const { data } = await api.post("/init");
+        const { data } = await http.post("/schedule/init", null, withAuth());
         const nextId = data?.scheduleId ?? null;
         if (nextId) {
           syncSchedule(Number(nextId), true);
@@ -84,7 +91,7 @@ export default function ExternalCourses() {
       }
     }
     ensureSchedule();
-  }, [api, scheduleId, syncSchedule]);
+  }, [scheduleId, syncSchedule]);
 
   const loadExternal = useCallback(
     async (id) => {
@@ -92,10 +99,13 @@ export default function ExternalCourses() {
         setExternalRows([]);
         return;
       }
-      const { data } = await api.get(`/core-courses/slots/${id}`);
+      const { data } = await http.get(
+        `/schedule/core-courses/slots/${id}`,
+        withAuth()
+      );
       setExternalRows(data);
     },
-    [api]
+    []
   );
 
   useEffect(() => {
@@ -188,7 +198,11 @@ export default function ExternalCourses() {
           startTime: entry.startTime,
           endTime: entry.endTime,
         };
-        const { data } = await api.post("/core-courses/slots", payload);
+        const { data } = await http.post(
+          "/schedule/core-courses/slots",
+          payload,
+          withAuth()
+        );
         const receivedId = data?.scheduleId ? Number(data.scheduleId) : null;
         if (Number.isFinite(receivedId) && receivedId !== latestScheduleId) {
           latestScheduleId = receivedId;
