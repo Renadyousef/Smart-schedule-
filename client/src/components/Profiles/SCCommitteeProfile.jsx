@@ -3,18 +3,21 @@ import React from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import axios from "axios";
+import API from "../../API_continer"; 
 
-// (اختياري) تقدرين تمرّرين الهيدر/الفوتر من برا لو بغيتي
 import SC_Header from "../SCHome/Header.jsx";
 import Footer from "../Footer/Footer.jsx";
 
-// Axios instance مع Authorization تلقائيًا
+
 const api = axios.create({ baseURL: "http://localhost:5000" });
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+
+
+const http = API || api;
 
 export default function SCCommitteeProfile({
   includeHeader = false,
@@ -32,16 +35,17 @@ export default function SCCommitteeProfile({
   const [errors, setErrors] = React.useState({ name: "", email: "" });
   const [notice, setNotice] = React.useState("");
 
-  // جلب بيانات البروفايل (نفس منطق TLCProfile)
+
   React.useEffect(() => {
     async function fetchProfile() {
       try {
         const stored = JSON.parse(localStorage.getItem("user") || "null");
         if (!stored?.id) throw new Error("No user in localStorage");
 
-        const { data } = await api.get(`/api/profile/${stored.id}`);
+      
+        const { data } = await http.get(`/api/profile/${stored.id}`);
 
-        // نبني الاسم الكامل من firstName/lastName إن وُجدوا، وإلا نستخدم data.name
+
         const fullName =
           [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
           data.name ||
@@ -83,7 +87,6 @@ export default function SCCommitteeProfile({
     setNotice(""); setIsEditing(false);
   }
 
-  // الحفظ (نفس TLCProfile): نفصل الاسم إلى firstName/lastName ونرسل PUT
   async function onSave(e) {
     e?.preventDefault?.();
     setNotice("");
@@ -96,7 +99,8 @@ export default function SCCommitteeProfile({
       const [firstName, ...rest] = form.name.trim().split(/\s+/);
       const lastName = rest.join(" ") || "-";
 
-      await api.put(`/api/profile/${stored.id}`, {
+   
+      await http.put(`/api/profile/${stored.id}`, {
         firstName,
         lastName,
         email: form.email.trim(),
@@ -105,7 +109,7 @@ export default function SCCommitteeProfile({
       const updated = { ...user, name: form.name.trim(), email: form.email.trim() };
       setUser(updated);
 
-      // تحديث localStorage اختياري
+
       try {
         const ls = JSON.parse(localStorage.getItem("user") || "{}");
         localStorage.setItem("user", JSON.stringify({ ...ls, name: updated.name, email: updated.email }));
@@ -122,7 +126,7 @@ export default function SCCommitteeProfile({
 
   return (
     <div className="sc-prof" dir="ltr">
-      {/* نعرض الهيدر فقط لو انطلب */}
+   
       {includeHeader && (
         <div className="sticky-top backdrop-wrap">
           <SC_Header
@@ -165,7 +169,7 @@ export default function SCCommitteeProfile({
               <stop offset="100%" stopColor="#3b82f6" />
             </linearGradient>
           </defs>
-          <path d="M0,64 C240,100 480,40 720,64 C960,88 1200,76 1440,60 L1440,160 L0,160 Z" fill="url(#scWave)"/>
+        <path d="M0,64 C240,100 480,40 720,64 C960,88 1200,76 1440,60 L1440,160 L0,160 Z" fill="url(#scWave)"/>
         </svg>
       </section>
 
