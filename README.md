@@ -3,6 +3,7 @@
 ## Table of Contents
 - [Project Overview](#project-overview)
 - [Technologies Used](#technologies-used)
+- [Prerequisites](#prerequisites)
 - [Development Setup (Docker)](#development-setup-docker)
 - [Environment Variables](#environment-variables)
 - [Demo Credentials](#demo-credentials)
@@ -33,6 +34,16 @@ It automatically generates course schedules based on predefined rules and commit
 - **Deployment:** Vercel, Docker 
 
 ---
+
+## Prerequisites
+
+To run the project locally (development or testing), you only need:
+
+- Docker
+
+
+---
+
 ## Environment Variables
 
 JWT_SECRET=
@@ -50,7 +61,7 @@ such as the local port on the server..
 
 This project uses Docker for development and pre-deployment testing.  
 All services run in containers, ensuring consistent behavior across environments.  
-No need to manually install dependencies — just use Docker Compose.
+No need to manually install dependencies just use Docker Compose.
 
 Note: Production services only update when pushed to the main branch
 local Docker setup is purely for development and testing.
