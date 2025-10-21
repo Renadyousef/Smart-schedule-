@@ -41,7 +41,7 @@ app.use(
   cors({
     origin: "https://smart-schedule-phi.vercel.app", //  frontend's domain on Vercel
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization","X-User-Id"],
+    allowedHeaders: ["Content-Type", "Authorization","X-User-Id", "Cache-Control"],
     credentials: true, 
   })
 );
