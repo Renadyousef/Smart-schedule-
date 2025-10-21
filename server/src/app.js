@@ -69,9 +69,7 @@ app.use(
 );
 
 // 👇 very important: respond to preflight requests before any routes
-app.options("*", cors());
-
-
+//app.options("*", cors());
 
 
 app.use(express.json());
