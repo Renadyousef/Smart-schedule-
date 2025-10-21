@@ -3,8 +3,19 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
+import API from "../../API_continer"; // ✅ تمّت الإضافة
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+
+/* ===== عميل HTTP موحّد ===== */
+// نفضّل API المشترك إن وُجد. وإلا ننشئ axios مع حقن التوكِن تلقائيًا.
+const fallback = axios.create({ baseURL: API_BASE });
+fallback.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) config.headers.Authorization = `Bearer ${token}`;
+  return config;
+});
+const http = API || fallback;
 
 /* ===== تخمين الاسم/المستوى من التخزين المحلي كما هي ===== */
 function coerceLevelFlexible(val) {
@@ -97,9 +108,8 @@ function StudentNotificationsPanel() {
       if (onlyUnread) params.unread = 1;
       if (typeFilter !== "all") params.type = typeFilter;
 
-      // ✅ دايمًا من /api/notifications/sc مع تمرير type
-      const url = `${API_BASE}/api/notifications/sc`;
-      const res = await axios.get(url, { params });
+      // ✅ استخدام http الموحّد + تمرير التوكِن تلقائيًا من الـ interceptor
+      const res = await http.get(`/api/notifications/sc`, { params });
       setItems(res.data || []);
     } catch (e) {
       console.error(e);
@@ -114,7 +124,7 @@ function StudentNotificationsPanel() {
 
   async function markRead(id, isRead = true) {
     try {
-      await axios.put(`${API_BASE}/api/notifications/${id}/read`, { isRead });
+      await http.put(`/api/notifications/${id}/read`, { isRead });
       setItems((prev) =>
         prev.map((n) =>
           n.NotificationID === id
