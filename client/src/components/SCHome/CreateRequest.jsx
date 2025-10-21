@@ -2,7 +2,7 @@
 import { useMemo, useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
-
+import API from '../../API_continer'
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
 /* helpers */
@@ -68,7 +68,7 @@ export default function CreateRequest() {
 
     try {
       setSending(true);
-      const { data } = await axios.post(`${API_BASE}/createRequests/requests`, payload, {
+      const { data } = await API.post(`/createRequests/requests`, payload, {
         headers: { "Content-Type": "application/json", Accept: "application/json" },
       });
       setOkMsg(`Create Request Successfully`);
