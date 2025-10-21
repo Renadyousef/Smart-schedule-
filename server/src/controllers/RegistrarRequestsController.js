@@ -1,3 +1,4 @@
+
 // server/controllers/RegistrarRequestsController.js
 import pool from "../../DataBase_config/DB_config.js";
 
