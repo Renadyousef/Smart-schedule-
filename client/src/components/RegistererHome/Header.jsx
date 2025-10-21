@@ -16,13 +16,19 @@ function initialsFrom(nameLike, fallback = "RG") {
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
 
-export default function RegistrarHeader({ onLogout }) {
+export default function RegistrarHeader({
+  onSignOut,
+  redirectAfter = "/signup",
+}) {
   const navigate = useNavigate();
   const [showImg, setShowImg] = useState(true);
 
   // --- auth info from localStorage ---
   const token = useMemo(() => localStorage.getItem("token") || "", []);
-  const userId = useMemo(() => Number(localStorage.getItem("userId") || 0), []);
+  const userId = useMemo(
+    () => Number(localStorage.getItem("userId") || 0),
+    []
+  );
   const headers = useMemo(
     () => (token ? { Authorization: `Bearer ${token}` } : {}),
     [token]
@@ -48,16 +54,34 @@ export default function RegistrarHeader({ onLogout }) {
       const res = await axios.get(url, { headers });
       setUnreadCount(Number(res.data?.unread || 0));
     } catch (e) {
-      // صامت
+      // سكون صامت، ما نزعج المستخدم
+      // console.error("loadCounts error", e);
     }
   }
   useEffect(() => {
     loadCounts();
     const id = setInterval(loadCounts, 30000); // update every 30s
     return () => clearInterval(id);
-  }, []);
+  }, []); // أول مرّة فقط
 
   const goProfile = () => navigate("/account");
+
+  const handleSignOut = async (e) => {
+    e?.preventDefault?.();
+    e?.stopPropagation?.();
+
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("fullName");
+      localStorage.removeItem("userName");
+      localStorage.removeItem("email");
+      localStorage.setItem("logout_broadcast", String(Date.now()));
+      if (typeof onSignOut === "function") await Promise.resolve(onSignOut());
+    } finally {
+      window.location.replace(redirectAfter);
+    }
+  };
 
   return (
     <nav className="navbar navbar-expand-lg bg-body-tertiary">
@@ -84,6 +108,7 @@ export default function RegistrarHeader({ onLogout }) {
             <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
             <NavLink className="nav-link" to="/registrar/irregular">Irregular Students</NavLink>
 
+            {/* === New: Notifications tab === */}
             <NavLink className="nav-link position-relative" to="/registrar/notifications">
               <span className="me-1"></span> Notifications
               {unreadCount > 0 && (
@@ -134,10 +159,14 @@ export default function RegistrarHeader({ onLogout }) {
               </li>
               <li><hr className="dropdown-divider" /></li>
               <li>
-                {/* نفس SC بالضبط */}
-                <button className="dropdown-item text-danger" onClick={onLogout}>
-                  Log out
-                </button>
+                <a
+                  href={redirectAfter}
+                  className="dropdown-item text-danger"
+                  onClickCapture={handleSignOut}
+                  onClick={(e) => e.preventDefault()}
+                >
+                  Log Out
+                </a>
               </li>
             </ul>
           </div>

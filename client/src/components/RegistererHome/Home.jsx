@@ -11,15 +11,8 @@ import OfferElective from "../OfferElective/ViewElectiveRequests.jsx";
 import RegistrarRequests from "./RegistrarRequests.jsx";
 import RegistrarNotifications from "./RegistrarNotifications.jsx";
 
-/* ======================= Helpers ======================= */
-function readJSON(s) {
-  try {
-    return s ? JSON.parse(s) : null;
-  } catch {
-    return null;
-  }
-}
-
+// Small helper to read a friendly first name from storage
+function readJSON(s) { try { return s ? JSON.parse(s) : null; } catch { return null; } }
 function pickDisplayNameFromStorage() {
   const stores = [localStorage, sessionStorage];
   const keys = ["user", "profile", "account", "registrar"];
@@ -28,9 +21,7 @@ function pickDisplayNameFromStorage() {
       const obj = readJSON(store.getItem(k));
       if (!obj) continue;
       const base = obj.user || obj.profile || obj.account || obj;
-      const full =
-        base?.name ||
-        [base?.firstName, base?.lastName].filter(Boolean).join(" ").trim();
+      const full = base?.name || [base?.firstName, base?.lastName].filter(Boolean).join(" ").trim();
       if (full && String(full).trim()) {
         return String(full).trim().split(/\s+/)[0];
       }
@@ -43,6 +34,8 @@ function pickDisplayNameFromStorage() {
 function Dashboard() {
   return (
     <div className="container py-4">
+      <h1 className="mb-4"> </h1>
+
       {/* KPIs */}
       <div className="row g-3 mb-4">
         <div className="col-md-4">
@@ -71,7 +64,7 @@ function Dashboard() {
               <small className="text-muted">This Term</small>
             </div>
           </div>
-        </div>
+           </div>
       </div>
 
       {/* Quick Actions */}
@@ -82,13 +75,15 @@ function Dashboard() {
             <Link to="/registrar/irregular/add" className="btn btn-primary">
               + Add Irregular Student
             </Link>
+
             <Link to="/registrar/requests" className="btn btn-outline-secondary">
               Respond to Requests
             </Link>
-            <Link to="/registrar/electives" className="btn btn-success">
-              Offer New Elective
-            </Link>
-          </div>
+
+<Link to="/registrar/electives" className="btn btn-success">
+  Offer New Elective
+</Link>     
+     </div>
         </div>
       </div>
 
@@ -111,7 +106,6 @@ function Dashboard() {
             </div>
           </div>
         </div>
-
         <div className="col-lg-6">
           <div className="card shadow-sm h-100">
             <div className="card-body">
@@ -159,36 +153,27 @@ function IrregularStudents() {
   );
 }
 
+function CommitteeRequests() {
+  return (
+    <div className="container py-4">
+      <h2>Committee Requests Page</h2>
+    </div>
+  );
+}
+
 /* ======================= Home (Router) ======================= */
 export default function Home() {
   const [displayName, setDisplayName] = useState("Registrar");
 
-  const onLogout = () => {
-    try {
-      localStorage.removeItem("token");
-      localStorage.removeItem("userId");
-      localStorage.removeItem("fullName");
-      localStorage.removeItem("userName");
-      localStorage.removeItem("email");
-      localStorage.setItem("logout_broadcast", String(Date.now()));
-    } finally {
-      window.location.replace("/signup");
-    }
-  };
-
   useEffect(() => {
     const compute = () => setDisplayName(pickDisplayNameFromStorage());
     compute();
-
     const onStorage = (e) => {
-      if (!e || ["user", "profile", "account", "registrar"].includes(e.key))
-        compute();
+      if (!e || ["user","profile","account","registrar"].includes(e.key)) compute();
     };
     const onFocus = () => compute();
-
     window.addEventListener("storage", onStorage);
     window.addEventListener("focus", onFocus);
-
     const id = setInterval(compute, 2500);
     return () => {
       window.removeEventListener("storage", onStorage);
@@ -199,48 +184,43 @@ export default function Home() {
 
   return (
     <Router>
-      <Header onLogout={onLogout} />
+      <Header />
+      {/* Hero header to match other pages */}
+      <section className="hero d-flex align-items-center text-center text-white">
+        <div className="container">
+          <h1 className="fw-bold mb-3">Welcome {displayName}</h1>
+        </div>
+      </section>
       <Routes>
-        {/* Main dashboard (Home) */}
-        <Route
-          path="/"
-          element={
-            <>
-              <section className="hero d-flex align-items-center text-center text-white">
-                <div className="container">
-                  <h1 className="fw-bold mb-3">Welcome {displayName}</h1>
-                </div>
-              </section>
-              <Dashboard />
-            </>
-          }
-        />
+        {/* صفحة البداية (Home) */}
+        <Route path="/" element={<Dashboard />} />
 
-        {/* Redirects */}
+        {/* لو دخل المستخدم على /registrar نرجّعه لـ / (Dashboard) */}
         <Route path="/registrar" element={<Navigate to="/" replace />} />
 
-        {/* Pages */}
+        {/* الصفحات */}
         <Route path="/registrar/irregular" element={<IrregularStudents />} />
         <Route path="/registrar/irregular/add" element={<AddIrregularStudent />} />
         <Route path="/registrar/requests" element={<RegistrarRequests />} />
         <Route path="/registrar/electives" element={<OfferElective />} />
-        <Route path="/registrar/notifications" element={<RegistrarNotifications />} />
 
-        {/* Profile */}
+        {/* صفحة البروفايل */}
         <Route path="/account" element={<RegistrarProfile />} />
 
-        {/* Fallback */}
+        {/* (اختياري) لو في /requests بدون /registrar */}
+        <Route path="/requests" element={<RegistrarRequests />} />
+        <Route path="/registrar/notifications" element={<RegistrarNotifications />} />
+
+
+        {/* ⚠️ إزالة التكرار الذي كان يكتب /registrar/requests مرة ثانية */}
+        {/* <Route path="/registrar/requests" element={<CommitteeRequests />} /> */}
+
+        {/* أي مسار غير معروف → رجوع للـ Home */}
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
-
       <style>{`
-        .hero {
-          background: linear-gradient(135deg, #1766ff, #0a3ea7);
-          padding: 80px 20px;
-        }
-        body {
-          background: #f8fbff;
-        }
+        .hero { background: linear-gradient(135deg, #1766ff, #0a3ea7); padding: 80px 20px; }
+        body { background: #f8fbff; }
       `}</style>
     </Router>
   );
