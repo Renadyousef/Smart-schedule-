@@ -1,7 +1,8 @@
-import React, { useMemo, useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { Container, Spinner, Alert, Button, Nav, Modal, Form, Row, Col } from "react-bootstrap";
 import "bootstrap/dist/css/bootstrap.min.css";
+import API from "../../API_continer"; // ✅ تمّت الإضافة
 
 /* ====== Constants ====== */
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
@@ -36,6 +37,22 @@ const PALETTE = {
 
 const STORAGE_KEY = "sc.activeScheduleId";
 const EVENT_NAME = "sc-schedule-changed";
+const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
+const fallback = axios.create({ baseURL: API_BASE });
+const http = API || fallback;
+
+function withAuth(config = {}) {
+  if (typeof window === "undefined") return config;
+  const token = window.localStorage.getItem("token");
+  if (!token) return config;
+  return {
+    ...config,
+    headers: {
+      ...(config.headers || {}),
+      Authorization: `Bearer ${token}`,
+    },
+  };
+}
 
 const ADD_FORM_TEMPLATE = {
   courseCode: "",
@@ -87,16 +104,6 @@ export default function GeneratedSchedule() {
   const [loadingList, setLoadingList] = useState(true);
   const [approving, setApproving] = useState(false);
 
-  const token = localStorage.getItem("token");
-  const api = useMemo(
-    () =>
-      axios.create({
-        baseURL: "http://localhost:5000/schedule",
-        headers: { Authorization: `Bearer ${token}` },
-      }),
-    [token]
-  );
-
   const persistScheduleId = useCallback((value) => {
     if (typeof window === "undefined") return;
     if (value !== null) {
@@ -130,14 +137,18 @@ export default function GeneratedSchedule() {
     async function fetchSchedules() {
       setLoadingList(true);
       try {
-        let { data } = await api.get("/list");
+        let { data } = await http.get("/schedule/list", withAuth());
         let rows = data ?? [];
 
         if (!rows.length) {
           try {
-            const { data: created } = await api.post("/init");
+            const { data: created } = await http.post(
+              "/schedule/init",
+              null,
+              withAuth()
+            );
             if (created?.scheduleId) {
-              const refreshed = await api.get("/list");
+              const refreshed = await http.get("/schedule/list", withAuth());
               rows = refreshed.data ?? [];
             }
           } catch (err) {
@@ -162,7 +173,7 @@ export default function GeneratedSchedule() {
       }
     }
     fetchSchedules();
-  }, [api, updateActiveSchedule]);
+  }, [updateActiveSchedule]);
 
   const loadGrid = async (id) => {
     if (!id) {
@@ -171,7 +182,10 @@ export default function GeneratedSchedule() {
       return;
     }
     try {
-      const { data } = await api.get(`/grid/${id}`);
+      const { data } = await http.get(
+        `/schedule/grid/${id}`,
+        withAuth()
+      );
       const normalizedSlots = (data ?? []).map((slot) => ({
         ...slot,
         start: slot.start ? slot.start.slice(0, 5) : "",
@@ -327,7 +341,7 @@ export default function GeneratedSchedule() {
 
   const refreshSchedules = useCallback(async () => {
     try {
-      const { data } = await api.get("/list");
+      const { data } = await http.get("/schedule/list", withAuth());
       const rows = data ?? [];
       setSchedules(rows);
       if (rows.length === 0) {
@@ -342,7 +356,7 @@ export default function GeneratedSchedule() {
     } catch (err) {
       console.error("Refresh schedules failed:", err);
     }
-  }, [api, updateActiveSchedule]);
+  }, [updateActiveSchedule]);
 
   const notifyScheduleChange = useCallback(() => {
     const current = scheduleIdRef.current;
@@ -434,7 +448,11 @@ export default function GeneratedSchedule() {
     setEditorError(null);
     setSavingSlotId(slotId);
     try {
-      await api.patch(`/slots/${slotId}`, payload);
+      await http.patch(
+        `/schedule/slots/${slotId}`,
+        payload,
+        withAuth()
+      );
       if (scheduleIdRef.current !== null && scheduleIdRef.current !== undefined) {
         await loadGrid(scheduleIdRef.current);
       }
@@ -456,7 +474,7 @@ export default function GeneratedSchedule() {
     setEditorError(null);
     setRemovingSlotId(slotId);
     try {
-      await api.delete(`/slots/${slotId}`);
+      await http.delete(`/schedule/slots/${slotId}`, withAuth());
       if (scheduleIdRef.current !== null && scheduleIdRef.current !== undefined) {
         await loadGrid(scheduleIdRef.current);
       }
@@ -581,17 +599,21 @@ export default function GeneratedSchedule() {
     setAddingSlot(true);
     try {
       for (const slot of slots) {
-        await api.post(`/slots`, {
-          scheduleId: scheduleIdRef.current,
-          courseCode: trimmedCode,
-          courseName: trimmedName,
-          sectionNumber: String(slot.sectionNumber),
-          capacity: capacityRaw || undefined,
-          day: slot.day,
-          start: slot.start,
-          end: slot.end,
-          isExternal: addForm.isExternal,
-        });
+        await http.post(
+          "/schedule/slots",
+          {
+            scheduleId: scheduleIdRef.current,
+            courseCode: trimmedCode,
+            courseName: trimmedName,
+            sectionNumber: String(slot.sectionNumber),
+            capacity: capacityRaw || undefined,
+            day: slot.day,
+            start: slot.start,
+            end: slot.end,
+            isExternal: addForm.isExternal,
+          },
+          withAuth()
+        );
       }
       await loadGrid(scheduleIdRef.current);
       await refreshSchedules();
@@ -648,7 +670,11 @@ export default function GeneratedSchedule() {
     if (!scheduleId) return;
     setBusy(true);
     try {
-      await api.post(`/generate/${scheduleId}`);
+      await http.post(
+        `/schedule/generate/${scheduleId}`,
+        null,
+        withAuth()
+      );
       await loadGrid(scheduleId);
       setMsg("✅ Schedule generated.");
       setTimeout(() => setMsg(null), 2000);
@@ -673,7 +699,11 @@ export default function GeneratedSchedule() {
     setApproving(true);
     setMsg(null);
     try {
-      await api.post(`/approve/${scheduleId}`);
+      await http.post(
+        `/schedule/approve/${scheduleId}`,
+        null,
+        withAuth()
+      );
       await loadGrid(scheduleId);
       await refreshSchedules();
       notifyScheduleChange();
