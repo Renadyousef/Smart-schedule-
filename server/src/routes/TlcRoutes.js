@@ -5,7 +5,7 @@ import {fetchCourses} from '../controllers/fetchAllCources.js'
 import {approveSchedule} from '../controllers/ApproveSchudleController.js'
 import {submitFeedback} from '../controllers/feedbackfromTLC.js'
 const router = express.Router();
-//to get them on display
+
 //fetch all cources first and display them by name
 router.get('/cources',fetchCourses)
 
