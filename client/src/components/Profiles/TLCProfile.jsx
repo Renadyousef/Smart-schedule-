@@ -1,53 +1,42 @@
-// src/components/Profiles/TLCProfile.jsx
+// client/src/components/Profiles/TLCProfile.jsx
 import React from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
 import axios from "axios";
+import API from "../../API_continer";
+import SC_Header from "../SCHome/Header.jsx";
+import Footer from "../Footer/Footer.jsx";
 
-/**
- * TLC Profile — Backend-ready & بدون هيدر/فوتر
- * - يجلب بيانات المستخدم عند التحميل من /api/profile/:id
- * - يحدث الاسم/الإيميل عبر PUT لنفس المسار
- * - Authorization من localStorage.token
- * - الصورة الافتراضية ثابتة "TLC" دائمًا (نتجاهل أي avatar)
- */
-
-// Axios instance مع Authorization تلقائي
 const api = axios.create({ baseURL: "http://localhost:5000" });
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
+const http = API || api;
 
-export default function TLCProfile() {
+export default function TLCProfile({ includeHeader = false, includeFooter = false }) {
   const [user, setUser] = React.useState({
     name: "TLC Member",
     email: "tlc@example.com",
     role: "Teaching Load Committee (TLC)",
     department: "Teaching Load Committee",
   });
-
   const [isEditing, setIsEditing] = React.useState(false);
   const [form, setForm] = React.useState({ name: user.name, email: user.email });
   const [errors, setErrors] = React.useState({ name: "", email: "" });
   const [notice, setNotice] = React.useState("");
 
-  // جلب بيانات البروفايل
   React.useEffect(() => {
     async function fetchProfile() {
       try {
         const stored = JSON.parse(localStorage.getItem("user") || "null");
         if (!stored?.id) throw new Error("No user in localStorage");
-
-        const { data } = await api.get(`/api/profile/${stored.id}`);
-
-        // نبني الاسم الكامل لو الـ API يعطّي first/last
+        const { data } = await http.get(`/api/profile/${stored.id}`);
         const fullName =
           [data.firstName, data.lastName].filter(Boolean).join(" ").trim() ||
           data.name ||
           "TLC Member";
-
         setUser({
           name: fullName,
           email: data.email || "tlc@example.com",
@@ -77,43 +66,36 @@ export default function TLCProfile() {
     return !e.name && !e.email;
   }
 
-  function onEdit(){ setNotice(""); setIsEditing(true); }
-  function onCancel(){
+  function onEdit() { setNotice(""); setIsEditing(true); }
+  function onCancel() {
     setForm({ name: user.name, email: user.email });
     setErrors({ name: "", email: "" });
     setNotice(""); setIsEditing(false);
   }
 
-  async function onSave(e){
+  async function onSave(e) {
     e?.preventDefault?.();
     setNotice("");
     if (!validate()) return;
-
     try {
       const stored = JSON.parse(localStorage.getItem("user") || "null");
       if (!stored?.id) throw new Error("No user in localStorage");
-
-      // نفصل الاسم لأول/أخير للباك-إند
       const [firstName, ...rest] = form.name.trim().split(/\s+/);
       const lastName = rest.join(" ") || "-";
-
-      await api.put(`/api/profile/${stored.id}`, {
+      await http.put(`/api/profile/${stored.id}`, {
         firstName,
         lastName,
         email: form.email.trim(),
       });
-
       const updated = { ...user, name: form.name.trim(), email: form.email.trim() };
       setUser(updated);
-
-      // تحديث localStorage اختياري
       try {
         const ls = JSON.parse(localStorage.getItem("user") || "{}");
         localStorage.setItem("user", JSON.stringify({ ...ls, name: updated.name, email: updated.email }));
       } catch {}
-
       setIsEditing(false);
-      setNotice("Changes saved."); setTimeout(() => setNotice(""), 2500);
+      setNotice("Changes saved.");
+      setTimeout(() => setNotice(""), 2500);
     } catch (err) {
       console.error("Update profile failed:", err);
       setNotice("Failed to save changes.");
@@ -123,27 +105,36 @@ export default function TLCProfile() {
 
   return (
     <div className="sc-profile" dir="ltr">
-      {/* Hero */}
-      <section className="hero area-constrained">
+      {includeHeader && (
+        <div className="sticky-top backdrop-wrap">
+          <SC_Header
+            onLogout={() => {
+              localStorage.removeItem("token");
+              localStorage.removeItem("user");
+              location.reload();
+            }}
+            userName={user.name}
+            email={user.email}
+            avatarUrl=""
+          />
+        </div>
+      )}
+
+      <section className={`hero area-constrained ${includeHeader ? "" : "hero-top-pad"}`}>
         <div className="hero-inner">
           <div className="avatar-wrap">
-            {/* ✅ صورة افتراضية ثابتة مكتوب فيها TLC */}
             <div className="avatar-fallback"><span>TLC</span></div>
             <span className="avatar-ring" aria-hidden />
           </div>
-
           <div className="identity">
             <h1 className="name">{user.name}</h1>
             <p className="email">{user.email}</p>
-
             <div className="chips">
               <span className="chip chip-role" title="Role">{user.role}</span>
               <span className="chip chip-dept" title="Department">{user.department}</span>
             </div>
           </div>
         </div>
-
-        {/* wave */}
         <svg className="wave" viewBox="0 0 1440 120" preserveAspectRatio="none" aria-hidden="true">
           <defs>
             <linearGradient id="tlcGrad" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -156,10 +147,8 @@ export default function TLCProfile() {
         </svg>
       </section>
 
-      {/* Card */}
       <main className="area-constrained main-pad">
         {notice && <div className="alert alert-primary shadow-sm soft-alert">{notice}</div>}
-
         <div className="glass-card">
           <h2 className="card-title">Profile details</h2>
           <form className="row g-3" onSubmit={onSave}>
@@ -175,7 +164,6 @@ export default function TLCProfile() {
               />
               {errors.name && <div className="invalid-feedback d-block">{errors.name}</div>}
             </div>
-
             <div className="col-12 col-md-6">
               <label className="form-label">Email</label>
               <input
@@ -189,17 +177,14 @@ export default function TLCProfile() {
               />
               {errors.email && <div className="invalid-feedback d-block">{errors.email}</div>}
             </div>
-
             <div className="col-12 col-md-6">
               <label className="form-label">Role</label>
               <input className="form-control form-readonly" value={user.role} disabled readOnly />
             </div>
-
             <div className="col-12 col-md-6">
               <label className="form-label">Department</label>
               <input className="form-control form-readonly" value={user.department} disabled readOnly />
             </div>
-
             <div className="col-12 d-flex flex-wrap justify-content-end gap-2 mt-2">
               {!isEditing ? (
                 <button type="button" className="btn btn-primary btn-lg px-4" onClick={onEdit}>Edit</button>
@@ -214,7 +199,8 @@ export default function TLCProfile() {
         </div>
       </main>
 
-      {/* نفس ستايل SC */}
+      {includeFooter && <Footer />}
+
       <style>{`
         :root{
           --page-bg:#f3f5f8;
@@ -232,11 +218,25 @@ export default function TLCProfile() {
         body{ background:var(--page-bg); }
         .sc-profile{ color:var(--ink); min-height:100vh; display:flex; flex-direction:column; }
         .area-constrained{ width:min(var(--maxw),100%); margin-inline:auto; padding-inline:clamp(12px,2vw,24px); }
+        .backdrop-wrap{ backdrop-filter:saturate(120%) blur(8px); background:rgba(255,255,255,.65); border-bottom:1px solid rgba(148,163,184,.2); z-index:1030; }
         .hero{ position:relative; padding-top:clamp(56px,7vh,72px); }
+        .hero-top-pad{ padding-top:clamp(24px,5vh,40px); }
         .hero-inner{ display:flex; align-items:center; gap:clamp(16px,3vw,28px); padding-block:clamp(22px,3.5vh,34px); }
         .avatar-wrap{ position:relative; width:clamp(84px,14vw,120px); height:clamp(84px,14vw,120px); }
-        .avatar-fallback{ width:100%; height:100%; border-radius:50%; display:flex; align-items:center; justify-content:center; background:radial-gradient(120% 120% at 30% 20%, #60a5fa 0%, #3b82f6 45%, #2563eb 100%); color:#fff; font-weight:800; letter-spacing:.5px; font-size:clamp(18px,2vw,22px); box-shadow:var(--shadow-lg); }
-        .avatar-ring{ content:""; position:absolute; inset:-6px; border-radius:50%; background:conic-gradient(from 0deg,#93c5fd,#3b82f6,#93c5fd); mask:radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 5px)); -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 5px)); filter:blur(.3px); opacity:.9; }
+        .avatar-fallback{
+          width:100%; height:100%; border-radius:50%;
+          display:flex; align-items:center; justify-content:center;
+          background:radial-gradient(120% 120% at 30% 20%, #60a5fa 0%, #3b82f6 45%, #2563eb 100%);
+          color:#fff; font-weight:800; letter-spacing:.5px; font-size:clamp(18px,2vw,22px);
+          box-shadow:var(--shadow-lg);
+        }
+        .avatar-ring{
+          content:""; position:absolute; inset:-6px; border-radius:50%;
+          background:conic-gradient(from 0deg, #93c5fd, #3b82f6, #93c5fd);
+          mask:radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 5px));
+          -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 6px), black calc(100% - 5px));
+          filter:blur(.3px); opacity:.9;
+        }
         .identity{ display:flex; flex-direction:column; gap:6px; }
         .name{ font-size:clamp(20px,2.2vw,26px); font-weight:800; margin:0; }
         .email{ margin:0; color:var(--muted); font-size:clamp(12px,1.6vw,14px); }
@@ -255,6 +255,7 @@ export default function TLCProfile() {
         .form-readonly{ background:#f8fafc; border-color:#e2e8f0; border-radius:12px; }
         .btn.btn-primary{ --bs-btn-bg:var(--blue); --bs-btn-border-color:var(--blue); --bs-btn-hover-bg:#2563eb; --bs-btn-hover-border-color:#2563eb; --bs-btn-focus-shadow-rgb:96,165,250; border-radius:12px; font-weight:700; }
         .btn-outline-secondary{ border-radius:12px; font-weight:700; }
+        .dropdown-menu{ z-index:1080; }
       `}</style>
     </div>
   );
