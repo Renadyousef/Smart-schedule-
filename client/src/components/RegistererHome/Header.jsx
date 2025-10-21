@@ -20,6 +20,7 @@ export default function RegistrarHeader({ onLogout }) {
   const navigate = useNavigate();
   const [showImg, setShowImg] = useState(true);
 
+  // --- auth info from localStorage ---
   const token = useMemo(() => localStorage.getItem("token") || "", []);
   const userId = useMemo(() => Number(localStorage.getItem("userId") || 0), []);
   const headers = useMemo(
@@ -27,6 +28,7 @@ export default function RegistrarHeader({ onLogout }) {
     [token]
   );
 
+  // --- display name / initials ---
   const displayName = useMemo(
     () =>
       localStorage.getItem("fullName") ||
@@ -37,6 +39,7 @@ export default function RegistrarHeader({ onLogout }) {
   );
   const initials = useMemo(() => initialsFrom(displayName, "RG"), [displayName]);
 
+  // --- unread counter for Notifications tab ---
   const [unreadCount, setUnreadCount] = useState(0);
   async function loadCounts() {
     if (!userId) return;
@@ -44,11 +47,13 @@ export default function RegistrarHeader({ onLogout }) {
       const url = `${API_BASE}/Notifications/counts?receiverId=${userId}`;
       const res = await axios.get(url, { headers });
       setUnreadCount(Number(res.data?.unread || 0));
-    } catch {}
+    } catch (e) {
+      // صامت
+    }
   }
   useEffect(() => {
     loadCounts();
-    const id = setInterval(loadCounts, 30000);
+    const id = setInterval(loadCounts, 30000); // update every 30s
     return () => clearInterval(id);
   }, []);
 
@@ -78,6 +83,7 @@ export default function RegistrarHeader({ onLogout }) {
             <NavLink className="nav-link" to="/">Home</NavLink>
             <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
             <NavLink className="nav-link" to="/registrar/irregular">Irregular Students</NavLink>
+
             <NavLink className="nav-link position-relative" to="/registrar/notifications">
               <span className="me-1"></span> Notifications
               {unreadCount > 0 && (
@@ -128,10 +134,8 @@ export default function RegistrarHeader({ onLogout }) {
               </li>
               <li><hr className="dropdown-divider" /></li>
               <li>
-                <button
-                  className="dropdown-item text-danger"
-                  onClick={onLogout}
-                >
+                {/* نفس SC بالضبط */}
+                <button className="dropdown-item text-danger" onClick={onLogout}>
                   Log out
                 </button>
               </li>

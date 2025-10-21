@@ -163,6 +163,19 @@ function IrregularStudents() {
 export default function Home() {
   const [displayName, setDisplayName] = useState("Registrar");
 
+  const onLogout = () => {
+    try {
+      localStorage.removeItem("token");
+      localStorage.removeItem("userId");
+      localStorage.removeItem("fullName");
+      localStorage.removeItem("userName");
+      localStorage.removeItem("email");
+      localStorage.setItem("logout_broadcast", String(Date.now()));
+    } finally {
+      window.location.replace("/signup");
+    }
+  };
+
   useEffect(() => {
     const compute = () => setDisplayName(pickDisplayNameFromStorage());
     compute();
@@ -186,7 +199,7 @@ export default function Home() {
 
   return (
     <Router>
-      <Header />
+      <Header onLogout={onLogout} />
       <Routes>
         {/* Main dashboard (Home) */}
         <Route
