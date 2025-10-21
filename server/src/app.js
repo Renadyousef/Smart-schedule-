@@ -51,7 +51,7 @@ app.use(
   })
 );
 //handels prefligh
-app.options("*", cors());
+//app.options("*", cors());
 
 
 app.use(express.json());
