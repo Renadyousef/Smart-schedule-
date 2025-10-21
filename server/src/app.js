@@ -37,9 +37,14 @@ const app = express();
 // }));
 //app.use(cors());//!for dev accept all port in deployment we have to spesfiy
 //for deployment 
+const allowedOrigins = [
+  "https://smart-schedule-phi.vercel.app", // Vercel
+  "http://localhost:3000"                   // local client container
+];
+
 app.use(
   cors({
-    origin: "https://smart-schedule-phi.vercel.app", //  frontend's domain on Vercel
+    origin:allowedOrigins, //  frontend's domain on Vercel
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization","X-User-Id", "Cache-Control"],
     credentials: true, 

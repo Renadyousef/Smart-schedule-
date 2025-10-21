@@ -1,14 +1,44 @@
+# configure the connection between 2 continers
 version: "3.9"
 
 services:
-  # Client container only
+ 
+  # Server container
+ 
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile  # server Dockerfile
+    container_name: server
+    ports:
+      - "5000:5000"           # expose server port to host
+    env_file:
+      - ./.env                # root-level .env file 
+    environment:
+      NODE_ENV: production    
+    # Optional: restart always
+    restart: unless-stopped
+
+  
+  # Client container
+ 
   client:
     build:
       context: ./client
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile  
     container_name: client
     ports:
-      - "3000:80"
+      - "3000:80"             # expose Nginx serving React
+    # Using server container as API backend in Docker network
     environment:
-      # Using Vercel backend
-      VITE_API_URL: https://smart-schedule-g7c3.vercel.app
+      
+      
+      VITE_API_URL: http://localhost:5000
+    depends_on:
+      - server
+    
+    restart: unless-stopped
+
+# ---------------------------
+# Notes:
+# This setup mirrors Vercel deployment structure locally

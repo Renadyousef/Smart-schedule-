@@ -6,7 +6,7 @@ FROM node:18
 # 2. Set the working directory inside the container:where the app starts the run with
 WORKDIR /app
 
-# 3. Copy package.json and package-lock.json * we have on root level+added a start script to packages.json
+# 3. Copy package.json and package-lock.json 
 COPY package*.json ./
 
 # 4 Install OS build tools + dependencies
@@ -20,4 +20,4 @@ COPY . .
 EXPOSE 5000
 
 # 7. *Command to start your server:this RUNS the code:This runs whatever you defined as "start" in your server/package.json
-CMD ["npm", "start"]
+CMD ["node", "./src/index.js"]
