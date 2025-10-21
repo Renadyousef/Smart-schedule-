@@ -1,0 +1,14 @@
+version: "3.9"
+
+services:
+  # Client container only
+  client:
+    build:
+      context: ./client
+      dockerfile: Dockerfile
+    container_name: client
+    ports:
+      - "3000:80"
+    environment:
+      # Using Vercel backend
+      VITE_API_URL: https://smart-schedule-g7c3.vercel.app

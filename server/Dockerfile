@@ -3,12 +3,10 @@
 # *gives you a fresh Linux system with Node.js 18 preinstalled
 FROM node:18 
 
-
 # 2. Set the working directory inside the container:where the app starts the run with
 WORKDIR /app
 
 # 3. Copy package.json and package-lock.json * we have on root level+added a start script to packages.json
-
 COPY package*.json ./
 
 # 4 Install OS build tools + dependencies
