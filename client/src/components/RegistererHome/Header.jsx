@@ -1,6 +1,6 @@
 // RegistrarHeader.jsx
-import React, { useEffect, useMemo, useState } from "react";
 import { NavLink, useNavigate } from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import "bootstrap/dist/js/bootstrap.bundle.min.js";
@@ -20,6 +20,13 @@ export default function RegistrarHeader({ onLogout }) {
   const navigate = useNavigate();
   const [showImg, setShowImg] = useState(true);
 
+  const token = useMemo(() => localStorage.getItem("token") || "", []);
+  const userId = useMemo(() => Number(localStorage.getItem("userId") || 0), []);
+  const headers = useMemo(
+    () => (token ? { Authorization: `Bearer ${token}` } : {}),
+    [token]
+  );
+
   const displayName = useMemo(
     () =>
       localStorage.getItem("fullName") ||
@@ -30,14 +37,7 @@ export default function RegistrarHeader({ onLogout }) {
   );
   const initials = useMemo(() => initialsFrom(displayName, "RG"), [displayName]);
 
-  const token = useMemo(() => localStorage.getItem("token") || "", []);
-  const userId = useMemo(() => Number(localStorage.getItem("userId") || 0), []);
-  const headers = useMemo(
-    () => (token ? { Authorization: `Bearer ${token}` } : {}),
-    [token]
-  );
   const [unreadCount, setUnreadCount] = useState(0);
-
   async function loadCounts() {
     if (!userId) return;
     try {
@@ -46,7 +46,6 @@ export default function RegistrarHeader({ onLogout }) {
       setUnreadCount(Number(res.data?.unread || 0));
     } catch {}
   }
-
   useEffect(() => {
     loadCounts();
     const id = setInterval(loadCounts, 30000);
@@ -54,16 +53,6 @@ export default function RegistrarHeader({ onLogout }) {
   }, []);
 
   const goProfile = () => navigate("/account");
-
-  const LinkEl = ({ to, children, end }) => (
-    <NavLink
-      className={({ isActive }) => "nav-link" + (isActive ? " active" : "")}
-      to={to}
-      end={end}
-    >
-      {children}
-    </NavLink>
-  );
 
   return (
     <nav className="navbar navbar-expand-lg bg-body-tertiary">
@@ -86,11 +75,11 @@ export default function RegistrarHeader({ onLogout }) {
 
         <div className="collapse navbar-collapse" id="navbarNavAltMarkup">
           <div className="navbar-nav me-auto">
-            <LinkEl to="/" end>Home</LinkEl>
-            <LinkEl to="/registrar/electives">Offer Electives</LinkEl>
-            <LinkEl to="/registrar/irregular">Irregular Students</LinkEl>
+            <NavLink className="nav-link" to="/">Home</NavLink>
+            <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
+            <NavLink className="nav-link" to="/registrar/irregular">Irregular Students</NavLink>
             <NavLink className="nav-link position-relative" to="/registrar/notifications">
-              Notifications
+              <span className="me-1"></span> Notifications
               {unreadCount > 0 && (
                 <span
                   className="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-danger"
@@ -139,7 +128,10 @@ export default function RegistrarHeader({ onLogout }) {
               </li>
               <li><hr className="dropdown-divider" /></li>
               <li>
-                <button className="dropdown-item text-danger" onClick={onLogout}>
+                <button
+                  className="dropdown-item text-danger"
+                  onClick={onLogout}
+                >
                   Log out
                 </button>
               </li>
