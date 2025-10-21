@@ -340,16 +340,23 @@ export const respondForStudent = async (req, res) => {
                  )
                ),
                null
-             ) as notes
+             ) as notes,
+             -- NEW: per-line respond data without "category"
+             coalesce(
+               jsonb_agg( coalesce(crs."ResponseData",'{}'::jsonb) - 'category'
+                          order by crs."CRStudentID"),
+               '[]'::jsonb
+             ) as responses
            from public."CommitteeRequestStudents" crs
            where crs."RequestID" = $1`,
           [id]
         );
 
-        const names = aggQ.rows[0]?.names ?? [];
-        const total = Number(aggQ.rows[0]?.total ?? 0);
-        const notes = (aggQ.rows[0]?.notes || []).filter(Boolean);
-        const message = notes.length ? notes.join(" | ") : ""; // 👈 رسالة = النوت فقط
+        const names     = aggQ.rows[0]?.names ?? [];
+        const total     = Number(aggQ.rows[0]?.total ?? 0);
+        const notes     = (aggQ.rows[0]?.notes || []).filter(Boolean);
+        const responses = aggQ.rows[0]?.responses ?? [];
+        const message   = notes.length ? notes.join(" | ") : ""; // رسالة = النوت فقط
 
         const dataJson = {
           requestId: Number(id),
@@ -357,7 +364,8 @@ export const respondForStudent = async (req, res) => {
           students: (names || []).filter(Boolean),
           total,
           status: publicMsg,
-          notes, // احتفاظ بالنوتات في Data أيضًا للعرض التفصيلي
+          notes,      // النوتات للقراءة السريعة
+          responses,  // ← NEW: raw respond data per line (without "category")
         };
 
         await client.query(
@@ -436,6 +444,7 @@ export const respondForStudent = async (req, res) => {
 export const updateRegistrarRequestStatus = async (req, res) => {
   try {
     const { id } = req.params;
+    thead;
     const raw = String((req.body || {}).status || "").toLowerCase().trim();
     const s = raw === "approved" ? "fulfilled" : raw;
 
@@ -456,7 +465,7 @@ export const updateRegistrarRequestStatus = async (req, res) => {
     console.log("➡️ updated rows:", r.rowCount);
     if (r.rowCount === 0) return res.status(404).json({ error: "Not found" });
 
-    /* (1) إشعار داخلي للجنة */
+    /* (1) إشعار داخلي للجنة — كما كان */
     try {
       const hdr = await pool.query(
         `select "CommitteeID","RegistrarID","CreatedBy","Title"
@@ -518,16 +527,23 @@ export const updateRegistrarRequestStatus = async (req, res) => {
                  )
                ),
                null
-             ) as notes
+             ) as notes,
+             -- NEW: per-line respond data without "category"
+             coalesce(
+               jsonb_agg( coalesce(crs."ResponseData",'{}'::jsonb) - 'category'
+                          order by crs."CRStudentID"),
+               '[]'::jsonb
+             ) as responses
            from public."CommitteeRequestStudents" crs
            where crs."RequestID" = $1`,
           [id]
         );
 
-        const names = aggQ.rows[0]?.names ?? [];
-        const total = Number(aggQ.rows[0]?.total ?? 0);
-        const notes = (aggQ.rows[0]?.notes || []).filter(Boolean);
-        const message = notes.length ? notes.join(" | ") : ""; // 👈 الرسالة = النوت فقط
+        const names     = aggQ.rows[0]?.names ?? [];
+        const total     = Number(aggQ.rows[0]?.total ?? 0);
+        const notes     = (aggQ.rows[0]?.notes || []).filter(Boolean);
+        const responses = aggQ.rows[0]?.responses ?? [];
+        const message   = notes.length ? notes.join(" | ") : ""; // الرسالة = النوت فقط
 
         const dataJson = {
           requestId: Number(id),
@@ -536,6 +552,7 @@ export const updateRegistrarRequestStatus = async (req, res) => {
           total,
           status: publicMsg,
           notes,
+          responses, // ← NEW
         };
 
         const ins = await pool.query(
@@ -545,10 +562,10 @@ export const updateRegistrarRequestStatus = async (req, res) => {
            RETURNING "NotificationID"`,
           [
             "respond request",
-            message,                  // فقط النوت
+            message,
             "respond_request",
             Number(id),
-            JSON.stringify(dataJson), // كل التفاصيل في Data
+            JSON.stringify(dataJson),
             createdByForPublic
           ]
         );

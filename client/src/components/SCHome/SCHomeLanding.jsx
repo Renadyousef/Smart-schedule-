@@ -3,12 +3,11 @@ import React from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
-import API from "../../API_continer"; // ✅ تمّت الإضافة
+import API from "../../API_continer";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 
 /* ===== عميل HTTP موحّد ===== */
-// نفضّل API المشترك إن وُجد. وإلا ننشئ axios مع حقن التوكِن تلقائيًا.
 const fallback = axios.create({ baseURL: API_BASE });
 fallback.interceptors.request.use((config) => {
   const token = localStorage.getItem("token");
@@ -108,7 +107,7 @@ function StudentNotificationsPanel() {
       if (onlyUnread) params.unread = 1;
       if (typeFilter !== "all") params.type = typeFilter;
 
-      // ✅ استخدام http الموحّد + تمرير التوكِن تلقائيًا من الـ interceptor
+      // دايمًا من /api/notifications/sc مع تمرير type (باستخدام العميل الموحّد)
       const res = await http.get(`/api/notifications/sc`, { params });
       setItems(res.data || []);
     } catch (e) {
@@ -195,6 +194,7 @@ function StudentNotificationsPanel() {
             <button className="btn btn-outline-secondary" onClick={fetchData}>
               Refresh
             </button>
+            {/* لا يوجد Mark all as read */}
           </div>
         </div>
 
@@ -216,16 +216,19 @@ function StudentNotificationsPanel() {
             const isRespond = n.Type === "respond_request";
             const isOpen = expanded.has(n.NotificationID);
 
-            // تفاصيل من Data
+            // بيانات منظّمة من Data
             const dataObj =
               typeof n.Data === "string" ? safeParse(n.Data) :
               (n.Data && typeof n.Data === "object" ? n.Data : null);
 
-            // الشارة تعتمد على Message
+            const statusFromData = (dataObj && typeof dataObj.status === "string")
+              ? dataObj.status.toLowerCase()
+              : null;
+
             const statusBadge =
-              n.Message === "approved" ? (
+              statusFromData === "approved" ? (
                 <span className="badge bg-success">Approved</span>
-              ) : n.Message === "rejected" ? (
+              ) : statusFromData === "rejected" ? (
                 <span className="badge bg-danger">Rejected</span>
               ) : null;
 
@@ -240,6 +243,12 @@ function StudentNotificationsPanel() {
                 ]
               : null;
 
+            // رسالة العرض: حذف الملاحظة النصية الإضافية
+            const displayMessage =
+              isRespond && (statusFromData === "approved" || statusFromData === "rejected")
+                ? statusFromData
+                : (n.Message || "");
+
             return (
               <div key={n.NotificationID} className="list-group-item">
                 <div className="d-flex justify-content-between align-items-start">
@@ -250,29 +259,18 @@ function StudentNotificationsPanel() {
                       {!n.IsRead && <span className="badge bg-primary">New</span>}
                     </div>
 
-                    {/* لا نعرض From/Email/Schedule إذا كان Respond Request */}
+                    {/* لا نعرض From/Email إذا كان Respond request */}
                     {!isRespond && (
-                      <>
-                        <div className="text-muted small mt-1">
-                          From: {n.Full_name || n.CreatedByName || "Unknown"}
-                          {n.Email && <div>{n.Email}</div>}
-                        </div>
-                        {(n.ScheduleLevel != null || n.GroupNo != null) && (
-                          <div className="text-muted small">
-                            Schedule: {n.ScheduleLevel != null ? `L${n.ScheduleLevel}` : "—"}
-                            {(n.ScheduleLevel != null && n.GroupNo != null) ? " • " : " "}
-                            {n.GroupNo != null ? `Group ${n.GroupNo}` : ""}
-                          </div>
-                        )}
-                      </>
+                      <div className="text-muted small mt-1">
+                        From: {n.Full_name || n.CreatedByName || "Unknown"}
+                        {n.Email && <div>{n.Email}</div>}
+                      </div>
                     )}
 
                     {/* الرسالة */}
-                    {n.Message && (
+                    {displayMessage && (
                       <div className="text-body mt-1" style={{ whiteSpace: "normal", wordBreak: "break-word" }}>
-                        {isRespond
-                          ? (<>{n.Message} — <span className="text-muted">Select "View more" to see details</span></>)
-                          : n.Message}
+                        {displayMessage}
                       </div>
                     )}
 
