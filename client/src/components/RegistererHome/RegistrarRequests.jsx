@@ -156,7 +156,7 @@ export default function RegistrarRequests() {
           data={active}
           onClose={() => setActive(null)}
           onUpdated={async () => {
-            const { data } = await axios.get(`${API_BASE}/registrarRequests/requests/${active.id}`);
+            const { data } = await API.get(`/registrarRequests/requests/${active.id}`);
             setActive(data);
             await reloadList();
           }}
@@ -181,7 +181,7 @@ function RequestDetail({ data, onClose, onUpdated }) {
     setMsg("");
     setErr("");
     try {
-      await axios.post(`${API_BASE}/registrarRequests/requests/${data.id}/status`, { status });
+      await API.post(`/registrarRequests/requests/${data.id}/status`, { status });
       setMsg(`Status updated to ${status}.`);
       await onUpdated();
     } catch (e) {
@@ -283,8 +283,8 @@ function StudentRow({ i, s, reqId, onUpdated }) {
         ...(irr.Note ? { Note: irr.Note } : {}),
       };
 
-      await axios.post(
-        `${API_BASE}/registrarRequests/requests/${reqId}/students/${s.crStudentId}/respond`,
+      await API.post(
+        `/registrarRequests/requests/${reqId}/students/${s.crStudentId}/respond`,
         { data, status }
       );
 

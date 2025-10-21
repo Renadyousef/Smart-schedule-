@@ -50,7 +50,7 @@ app.use(
     credentials: true, 
   })
 );
-//handels prefligh
+//handels prefligh:breaks the app tho i think its being handeled thro vercel
 //app.options("*", cors());
 
 
