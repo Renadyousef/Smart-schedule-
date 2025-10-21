@@ -4,10 +4,12 @@
 - [Project Overview](#project-overview)
 - [Technologies Used](#technologies-used)
 - [Prerequisites](#prerequisites)
-- [Development Setup (Docker)](#development-setup-docker)
+- [License](#license)
 - [Environment Variables](#environment-variables)
 - [Demo Credentials](#demo-credentials)
-- [License](#license)
+- [Development Setup (Docker)](#development-setup-docker)
+
+
 
 ---
 
@@ -44,6 +46,13 @@ To run the project locally (development or testing), you only need:
 
 ---
 
+## License
+
+This project is licensed under the **MIT License**.
+
+---
+
+
 ## Environment Variables
 
 JWT_SECRET= **can be anything**
@@ -56,12 +65,38 @@ DATABASE_URL= **our private url connection**
 
 Any additional config
 such as the local port on the server..
+---
+
+## Demo Credentials
+
+You can use the following accounts to explore different roles in the system:
+
+### Teaching Load Committee (TLC)
+- **Email:** renad1@ksu.edu.sa  
+- **Password:** Ela@911911  
+
+### Scheduling Committee (SC)
+- **Email:** R3@ksu.edu.sa  
+- **Password:** Rruba1234@  
+
+### Student
+- **Email:** R@student.ksu.edu.sa  
+- **Password:** Theoriginals1@  
+
+### Registrar
+- **Email:** renad2@ksu.edu.sa  
+- **Password:** Ela@911911  
+
+> You can also register a new account via the registration page.  
+> Demo users have full access to all features for their respective roles.
+> 
+---
 
 ## Development Setup (Docker)
 
 This project uses Docker for development and pre-deployment testing.  
 All services run in containers, ensuring consistent behavior across environments.  
-No need to manually install dependencies just use Docker Compose.
+No need to manually install dependencies, just use Docker Compose.
 
 Note: Production services only update when pushed to the main branch
 local Docker setup is purely for development and testing.
