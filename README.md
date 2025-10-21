@@ -46,13 +46,13 @@ To run the project locally (development or testing), you only need:
 
 ## Environment Variables
 
-JWT_SECRET=
+JWT_SECRET= **can be anything**
 
 
-OPENAI_API_KEY=
+OPENAI_API_KEY= **generate your own key, we can't commit any OpenAI keys, they get disabled**
 
 
-DATABASE_URL=
+DATABASE_URL= **our private url connection**
 
 Any additional config
 such as the local port on the server..
