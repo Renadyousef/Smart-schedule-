@@ -686,15 +686,14 @@ export default function GeneratedSchedule() {
 
   const activeSchedule = schedules.find((s) => s.ScheduleID === scheduleId) ?? null;
   const status = activeSchedule?.Status ?? null;
-  const locked = status === "approved";
+  const locked = status === "finalized";
   const editDisabled = !scheduleId || locked;
   const generateDisabled = busy || !scheduleId || locked;
-  const showApprove =
-    Boolean(scheduleId) && (status === "generated" || status === "shared");
+  const showFinalize = Boolean(scheduleId) && status === "approved";
   const baseSectionNumber = Number(addForm.sectionNumber);
   const hasBaseSection = !!addForm.sectionNumber && !Number.isNaN(baseSectionNumber);
 
-  const approve = async () => {
+  const finalize = async () => {
     if (!scheduleId) return;
     setApproving(true);
     setMsg(null);
@@ -707,12 +706,12 @@ export default function GeneratedSchedule() {
       await loadGrid(scheduleId);
       await refreshSchedules();
       notifyScheduleChange();
-      setMsg("✅ Schedule approved.");
+      setMsg("✅ Schedule finalized.");
       setTimeout(() => setMsg(null), 2000);
     } catch (err) {
-      console.error("Approve schedule failed:", err);
+      console.error("Finalize schedule failed:", err);
       const apiMsg = err?.response?.data?.msg;
-      setMsg(apiMsg ? `⚠️ ${apiMsg}` : "⚠️ Failed to approve schedule");
+      setMsg(apiMsg ? `⚠️ ${apiMsg}` : "⚠️ Failed to finalize schedule");
     } finally {
       setApproving(false);
     }
@@ -785,12 +784,12 @@ export default function GeneratedSchedule() {
       )}
       {scheduleId && status === "shared" && (
         <Alert variant="secondary" className="text-center">
-          This schedule has been shared. You can continue editing until it is approved.
+          This schedule has been shared. You can continue editing until it is finalized.
         </Alert>
       )}
-      {scheduleId && status === "approved" && (
+      {scheduleId && status === "finalized" && (
         <Alert variant="secondary" className="text-center">
-          This schedule is approved and locked for changes.
+          This schedule is finalized and locked for changes.
         </Alert>
       )}
       {msg && <Alert variant="info">{msg}</Alert>}
@@ -871,14 +870,14 @@ export default function GeneratedSchedule() {
               : "Generate / Refresh"}
           </Button>
         )}
-        {showApprove && (
+        {showFinalize && (
           <Button
             className="btn-feedback"
             style={{ backgroundImage: "linear-gradient(135deg, #40c057 0%, #2f9e44 100%)", color: "#fff" }}
-            onClick={approve}
+            onClick={finalize}
             disabled={approving}
           >
-            {approving ? "Approving..." : "Approve"}
+            {approving ? "Finalizing..." : "Finalize"}
           </Button>
         )}
       </div>

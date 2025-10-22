@@ -207,10 +207,10 @@ function ensureScheduleOwnershipRow(row, res) {
     res.status(404).json({ msg: "Slot not found" });
     return false;
   }
-  if (row.rows[0].Status === "shared" || row.rows[0].Status === "approved") {
+  if (row.rows[0].Status === "finalized") {
     res
       .status(409)
-      .json({ msg: "Schedule locked", error: "Approved or shared schedules cannot be edited" });
+      .json({ msg: "Schedule locked", error: "Finalized schedules cannot be edited" });
     return false;
   }
   return true;
@@ -413,7 +413,7 @@ export const initSchedule = async (req, res) => {
         `SELECT "ScheduleID"
            FROM "Schedule"
           WHERE "SchedulingCommitteeID"=$1
-            AND "Status"<>'shared'
+            AND "Status"<>'finalized'
           ORDER BY "ScheduleID" DESC
           LIMIT 1`,
         [scId]
@@ -500,7 +500,7 @@ export const addExternalSlot = async (req, res) => {
       workingScheduleId = scheduleId;
     }
 
-    if (scheduleStatus !== 'draft') {
+    if (scheduleStatus === 'finalized') {
       const levelForNew = currentLevel ?? null;
       const nextGroup = levelForNew !== null ? await nextGroupNo(client, scId, levelForNew) : null;
       const newSchedule = await client.query(
@@ -1075,26 +1075,26 @@ export const approveSchedule = async (req, res) => {
     }
 
     const status = current.rows[0].Status;
-    if (status === "approved") {
-      return res.status(200).json({ msg: "Schedule already approved" });
+    if (status === "finalized") {
+      return res.status(200).json({ msg: "Schedule already finalized" });
     }
-    if (status !== "generated" && status !== "shared") {
+    if (status !== "approved") {
       return res
         .status(409)
-        .json({ msg: "Schedule must be generated before approval", status });
+        .json({ msg: "Schedule must be approved before finalization", status });
     }
 
     await pool.query(
-      `UPDATE "Schedule" SET "Status"='approved' WHERE "ScheduleID"=$1`,
+      `UPDATE "Schedule" SET "Status"='finalized' WHERE "ScheduleID"=$1`,
       [scheduleId]
     );
 
     const scheduleLevel = current.rows[0]?.Level ?? null;
     const scheduleGroup = current.rows[0]?.GroupNo ?? null;
     const createdByVal = Number.isFinite(Number(userId)) ? Number(userId) : null;
-    const message = "Schedule approved ,you can view it now";
+    const message = "Schedule finalized, you can view it now";
     const dataPayload = JSON.stringify({
-      action: "schedule_approved",
+      action: "schedule_finalized",
       scheduleId,
       level: scheduleLevel,
       groupNo: scheduleGroup,
@@ -1119,10 +1119,10 @@ export const approveSchedule = async (req, res) => {
       console.warn("approveSchedule: notification insert skipped", notifyErr?.message || notifyErr);
     }
 
-    res.json({ msg: "Schedule approved" });
+    res.json({ msg: "Schedule finalized" });
   } catch (e) {
     console.error("approveSchedule:", e);
-    res.status(500).json({ msg: "Failed to approve schedule", error: e.message });
+    res.status(500).json({ msg: "Failed to finalize schedule", error: e.message });
   }
 };
 
