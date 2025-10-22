@@ -3,7 +3,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import API from "../../API_continer";
 
-/* لاحظ: الأيام هنا للعرض فقط. البيانات تُجلب من API، وما نفرض أيام/أنواع من عندنا. */
+/* الأيام للعرض فقط — الداتا من الـAPI */
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
 const TIMES = [
   "08:00 - 08:50",
@@ -15,31 +15,27 @@ const TIMES = [
   "15:00 - 15:50",
 ];
 
-/* لوح الألوان: كل نوع له لون ثابت */
+/* ألوان الأنواع */
 const PALETTE = {
-  core: "#cce5ff",      // محاضرة (Core / Lecture)
-  tutorial: "#ffe0b2",  // تمارين (Tutorial)
-  lab: "#e1bee7",       // معمل (Lab)
-  elective: "#fff9c4",  // اختياري (Elective/Optional)
-  default: "#f8f9fa",   // افتراضي (احتياطي)
+  core: "#cce5ff",
+  tutorial: "#ffe0b2",
+  lab: "#e1bee7",
+  elective: "#fff9c4",
+  default: "#f8f9fa",
 };
 
-/* ✅ استثناءات: مواد نثبّت نوعها بغض النظر عن الحسابات */
+/* استثناءات تثبيت نوع المادة */
 const COURSE_TYPE_OVERRIDES = {
-  SWE444: "core", // swe444 is lecture
-  // أضيفي مواد أخرى هنا إن لزم: "MATH101": "tutorial", ...
+  SWE444: "core",
 };
 
-/* توحيد النص لأي نوع يجي من الداتا أو نتيجتنا المحلية */
 function normalizeType(type) {
   const t = String(type || "").toLowerCase();
   if (t === "tutorial") return "tutorial";
   if (t === "lab" || t === "laboratory") return "lab";
   if (t === "elective" || t === "optional") return "elective";
-  return "core"; // أي شيء غير معروف نعتبره محاضرة (Core)
+  return "core";
 }
-
-/* تحويل النوع إلى اللون الفعلي من PALETTE */
 function colorOf(type) {
   const nt = normalizeType(type);
   if (nt === "tutorial") return PALETTE.tutorial;
@@ -47,7 +43,7 @@ function colorOf(type) {
   return PALETTE.core;
 }
 
-/* أدوات وقت */
+/* وقت */
 function titleCaseDay(dbDay) {
   if (!dbDay) return "";
   return dbDay.charAt(0).toUpperCase() + dbDay.slice(1).toLowerCase();
@@ -62,10 +58,10 @@ const SLOT_PARTS = TIMES.map((t) => {
 });
 const SLOT_STARTS = SLOT_PARTS.map((p) => p.s);
 
-/* منطق INTERNAL: أيام (أحد/ثلاثاء/خميس) تُعتبر أيام محاضرات للمواد الداخلية */
+/* منطق داخلي: أحد/ثلاثاء/خميس محاضرات */
 const INTERNAL_LECTURE_DAYS = new Set(["Sunday", "Tuesday", "Thursday"]);
 
-/* 1) تحويل ردّ /grid-by-level إلى rows */
+/* 1) تحويل /grid-by-level -> rows */
 function groupsGridToRows(groups) {
   const rows = [];
   for (const g of groups || []) {
@@ -84,7 +80,7 @@ function groupsGridToRows(groups) {
 
         course_code: s.course_code,
         course_name: s.course_name,
-        course_type: null, // نحدد لاحقًا
+        course_type: null,
 
         SectionID: s.section_id,
         section_number: s.section_number ?? null,
@@ -100,7 +96,7 @@ function groupsGridToRows(groups) {
   return rows;
 }
 
-/* 2) خريطة "أصغر شعبة" لكل كورس (للـ External) */
+/* 2) أصغر شعبة لكل كورس (للـ external) */
 function buildBaseSectionByCourse(rows) {
   const base = {};
   for (const r of rows || []) {
@@ -114,7 +110,7 @@ function buildBaseSectionByCourse(rows) {
   return base;
 }
 
-/* 3) rows -> schedule grid + تحديد النوع/اللون */
+/* 3) rows -> grid + تحديد النوع/اللون */
 function rowsToSchedule(rows) {
   const out = {};
   const baseSectionByCourse = buildBaseSectionByCourse(rows);
@@ -164,7 +160,7 @@ function rowsToSchedule(rows) {
       }
     }
 
-    // استثناءات ثابتة حسب الكود
+    // استثناءات ثابتة
     const cc = String(r.course_code || "").toUpperCase();
     if (COURSE_TYPE_OVERRIDES[cc]) type = COURSE_TYPE_OVERRIDES[cc];
 
@@ -198,7 +194,7 @@ function rowsToSchedule(rows) {
   return out;
 }
 
-/* تبويب الجداول حسب ScheduleID */
+/* تجميع حسب ScheduleID */
 function groupRowsBySchedule(rows) {
   const grouped = {};
   for (const row of rows || []) {
@@ -219,7 +215,7 @@ function groupRowsBySchedule(rows) {
   });
 }
 
-/* تجميع القروبات داخل كل لفل */
+/* تجميع القروبات لكل لفل */
 function buildLevelBuckets(allGroups) {
   const map = new Map();
   for (const g of allGroups) {
@@ -238,6 +234,16 @@ function buildLevelBuckets(allGroups) {
   });
   buckets.sort((a, b) => a.level - b.level);
   return buckets;
+}
+
+/* هل فيه أي خلايا جدول؟ */
+function hasAnyScheduleCells(grid) {
+  if (!grid || typeof grid !== "object") return false;
+  for (const day of DAYS) {
+    const col = grid[day];
+    if (col && Object.keys(col).length > 0) return true;
+  }
+  return false;
 }
 
 export default function FixedSchedule() {
@@ -261,20 +267,22 @@ export default function FixedSchedule() {
 
   const [showModal, setShowModal] = useState(false);
   const [comment, setComment] = useState("");
+  0
   const [submitting, setSubmitting] = useState(false);
   const [selectedTarget, setSelectedTarget] = useState(null);
 
+  const [missingLevel, setMissingLevel] = useState(false); // Your: ما فيه level
+
   const skip = useMemo(() => ({}), [scheduleGrid]);
 
-  /* ========= Helpers for auth config (لو ما كان API عنده interceptor) ========= */
   const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
   const authCfg = token ? { headers: { Authorization: `Bearer ${token}` } } : {};
 
-  /* جلب الداتا وبناء الجدول + الألوان (باستخدام API بدلاً من fetch) */
   useEffect(() => {
     async function run() {
       setLoading(true);
       setErr("");
+      setMissingLevel(false);
       try {
         const userRaw = localStorage.getItem("user");
         if (!userRaw) throw new Error("No user in localStorage");
@@ -282,7 +290,21 @@ export default function FixedSchedule() {
         try { user = JSON.parse(userRaw); } catch { throw new Error("Corrupted user in localStorage"); }
 
         const myLevel = user?.Level ?? user?.level;
-        if (!myLevel && myLevel !== 0) throw new Error("No level found in localStorage");
+
+        // Your + ما فيه level => رسالة بدل الخطأ
+        if (viewMode === "your" && (myLevel === undefined || myLevel === null || myLevel === "")) {
+          setMissingLevel(true);
+          setScheduleGrid({});
+          setScheduleIdCurrent(null);
+          setLevelCurrent(null);
+          setGroupNoCurrent(null);
+          setYourGroups([]);
+          setYourGroupPos(0);
+          setLevelBuckets([]);
+          setLevelPos(0);
+          setGroupPosInLevel(0);
+          return;
+        }
 
         const fetchLevelGroups = async (level) => {
           const { data: payload } = await API.get("/api/sections/grid-by-level", {
@@ -361,7 +383,7 @@ export default function FixedSchedule() {
       }
     }
     run();
-  }, [viewMode]); // apiBase حُذفنا واعتمدنا على API
+  }, [viewMode]); // يعتمد على API
 
   function selectGroupByIndex(i) {
     if (viewMode === "your") {
@@ -390,7 +412,7 @@ export default function FixedSchedule() {
     setShowModal(true);
   }
 
-  /* تنقّل بين المستويات في وضع "All" (عرض فقط) */
+  /* تنقّل بين المستويات (All) */
   function goNextLevel() {
     if (viewMode !== "all" || levelBuckets.length === 0) return;
     const next = (levelPos + 1) % levelBuckets.length;
@@ -424,9 +446,10 @@ export default function FixedSchedule() {
     viewMode === "your" ? (yourGroups[yourGroupPos]?.groupNo ?? groupNoCurrent) :
     (levelBuckets[levelPos]?.groups?.[groupPosInLevel]?.groupNo ?? groupNoCurrent);
 
-  const tabsForThisView = viewMode === "your"
-    ? yourGroups
-    : (levelBuckets[levelPos]?.groups || []);
+  const tabsForThisView = viewMode === "your" ? yourGroups : (levelBuckets[levelPos]?.groups || []);
+
+  const hasData = useMemo(() => hasAnyScheduleCells(scheduleGrid), [scheduleGrid]);
+  const renderMissingLevelMsg = (!loading && !err && viewMode === "your" && missingLevel);
 
   return (
     <div className="container my-4">
@@ -453,43 +476,30 @@ export default function FixedSchedule() {
         .btn-feedback:hover { background-color:#cce5ff; }
 
         .pager { gap:10px; }
+
         .nav-tabs .nav-link {
-          border: 1px solid #e1e6ef;
-          border-bottom: none;
-          margin-right: 6px;
-          border-top-left-radius: 12px;
-          border-top-right-radius: 12px;
-          color: #0b3a67;
-          font-weight: 600;
-          background: #f7f9fc;
+          border: 1px solid #e1e6ef; border-bottom:none; margin-right:6px;
+          border-top-left-radius:12px; border-top-right-radius:12px;
+          color:#0b3a67; font-weight:600; background:#f7f9fc;
         }
         .nav-tabs .nav-link.active {
-          background: #ffffff;
-          border-color: #bcd4ff #bcd4ff #ffffff;
+          background:#fff; border-color:#bcd4ff #bcd4ff #fff;
         }
         .tab-card {
-          border: 1px solid #e1e6ef;
-          border-radius: 0 12px 12px 12px;
-          padding: 12px;
-          background: #ffffff;
-          box-shadow: 0 8px 24px rgba(16,24,40,.05);
+          border:1px solid #e1e6ef; border-radius:0 12px 12px 12px;
+          padding:12px; background:#fff; box-shadow:0 8px 24px rgba(16,24,40,.05);
         }
 
-        /* Responsive */
         @media (max-width: 768px) {
-          .table-fixed { display: block; overflow-x: auto; white-space: nowrap; }
-          th, td { font-size: 0.75rem; height: 55px; padding: 2px; }
-          .subject-box { font-size: 0.75rem; line-height: 1.1; padding: 4px; }
-          .room { font-size: 0.65rem; }
-          h2 { font-size: 1.2rem; }
-          .btn-feedback { padding: 10px 20px; font-size: 0.9rem; }
-          .legend-box { font-size: 0.8rem; }
-          .container.my-4 { padding-left: 8px; padding-right: 8px; }
-          .tab-card { padding: 8px; }
+          .table-fixed { display:block; overflow-x:auto; white-space:nowrap; }
+          th, td { font-size:.75rem; height:55px; padding:2px; }
+          .subject-box { font-size:.75rem; line-height:1.1; padding:4px; }
+          .room { font-size:.65rem; }
+          .tab-card { padding:8px; }
         }
         @media (max-width: 390px) {
-          .subject-box { font-size: 0.7rem; }
-          th, td { font-size: 0.7rem; height: 50px; }
+          .subject-box { font-size:.7rem; }
+          th, td { font-size:.7rem; height:50px; }
         }
       `}</style>
 
@@ -522,7 +532,7 @@ export default function FixedSchedule() {
         Click any course cell to leave feedback about it, or use the button below for general notes.
       </p>
 
-      {(headerLevel != null) && (
+      {(headerLevel != null) && !renderMissingLevelMsg && (
         <div className="text-center mb-2">
           <h5 className="mb-2">
             Level {String(headerLevel)}
@@ -532,7 +542,7 @@ export default function FixedSchedule() {
       )}
 
       {/* Group Tabs */}
-      {tabsForThisView.length > 1 && (
+      {!renderMissingLevelMsg && tabsForThisView.length > 1 && (
         <>
           <ul className="nav nav-tabs justify-content-center mb-0">
             {tabsForThisView.map((g, i) => {
@@ -559,85 +569,112 @@ export default function FixedSchedule() {
       {loading && <div className="alert alert-info text-center">Loading…</div>}
       {err && !loading && <div className="alert alert-danger text-center">{err}</div>}
 
-      {/* جدول */}
-      <div className={tabsForThisView.length > 1 ? "tab-card" : ""}>
-        <table className="table-fixed">
-          <thead>
-            <tr>
-              <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
-              {DAYS.map((d) => (
-                <th key={d} style={{ backgroundColor: "#f1f3f5" }}>{d}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {TIMES.map((time, ti) => (
-              <tr key={time}>
-                <td className="fw-bold" style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}>{time}</td>
-                {DAYS.map((day) => {
-                  const key = `${day}#${ti}`;
-                  if (skip[key]) return null;
+      {/* رسالة: لا يوجد Level في وضع Your */}
+      {renderMissingLevelMsg && (
+        <div className="d-flex justify-content-center">
+          <div className="alert alert-light border text-center w-100" style={{ maxWidth: 680 }}>
+            <div className="fw-bold mb-1">Set your level in Profile to view your schedule.</div>
+          </div>
+        </div>
+      )}
 
-                  const slot = scheduleGrid?.[day]?.[time];
-                  if (!slot) return <td key={day}></td>;
+      {/* رسالة: لا يوجد جدول (تظهر مع بقاء أزرار Previous/Next خارج هذا الشرط) */}
+      {!renderMissingLevelMsg && !loading && !err && !hasData && (
+        <div className="d-flex justify-content-center">
+          <div className="alert alert-light border text-center w-100" style={{ maxWidth: 680 }}>
+            <div className="fw-bold mb-1">Schedule is not available now.</div>
+            <div className="text-muted small">Please check back later.</div>
+          </div>
+        </div>
+      )}
 
-                  const bg = colorOf(slot.type);
-                  const rowSpan = Math.max(1, slot.duration || 1);
+      {/* جدول (فقط عند توفر بيانات) */}
+      {!renderMissingLevelMsg && hasData && (
+        <>
+          <div className={tabsForThisView.length > 1 ? "tab-card" : ""}>
+            <table className="table-fixed">
+              <thead>
+                <tr>
+                  <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
+                  {DAYS.map((d) => (
+                    <th key={d} style={{ backgroundColor: "#f1f3f5" }}>{d}</th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {TIMES.map((time, ti) => (
+                  <tr key={time}>
+                    <td className="fw-bold" style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}>{time}</td>
+                    {DAYS.map((day) => {
+                      const key = `${day}#${ti}`;
+                      if (skip[key]) return null;
 
-                  if (rowSpan > 1) {
-                    for (let k = 1; k < rowSpan; k++) {
-                      const nextIdx = ti + k;
-                      if (nextIdx < TIMES.length) skip[`${day}#${nextIdx}`] = true;
-                    }
-                  }
+                      const slot = scheduleGrid?.[day]?.[time];
+                      if (!slot) return <td key={day}></td>;
 
-                  return (
-                    <td key={day} rowSpan={rowSpan}>
-                      <div
-                        className="subject-box clickable"
-                        style={{ backgroundColor: bg }}
-                        onClick={() => onCellClick(slot)}
-                        title="Click to give feedback on this course"
-                      >
-                        {slot.subject}
-                        <div className="room">Room {slot.room}</div>
-                      </div>
-                    </td>
-                  );
-                })}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+                      const bg = colorOf(slot.type);
+                      const rowSpan = Math.max(1, slot.duration || 1);
 
-      {/* Legend */}
-      <div className="d-flex justify-content-center align-items-center mt-4 flex-wrap gap-3">
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div><span> Lecture</span></div>
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.tutorial }}></div><span>Tutorial</span></div>
-        <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div><span>Lab</span></div>
-      </div>
+                      if (rowSpan > 1) {
+                        for (let k = 1; k < rowSpan; k++) {
+                          const nextIdx = ti + k;
+                          if (nextIdx < TIMES.length) skip[`${day}#${nextIdx}`] = true;
+                        }
+                      }
 
-      {/* زر الفيدباك */}
-      <div className="text-center mt-3">
-        <button
-          className="btn btn-feedback"
-          onClick={() => { setSelectedTarget(null); setComment(""); setShowModal(true); }}
-          disabled={!scheduleIdCurrent}
-          title={!scheduleIdCurrent ? "Schedule ID is missing — switch group/level or reload." : "Give feedback"}
-        >
-          Give Feedback
-        </button>
-      </div>
+                      return (
+                        <td key={day} rowSpan={rowSpan}>
+                          <div
+                            className="subject-box clickable"
+                            style={{ backgroundColor: bg }}
+                            onClick={() => onCellClick(slot)}
+                            title="Click to give feedback on this course"
+                          >
+                            {slot.subject}
+                            <div className="room">Room {slot.room}</div>
+                          </div>
+                        </td>
+                      );
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
 
-      {/* Pager للّفل في وضع All */}
+          {/* Legend */}
+          <div className="d-flex justify-content-center align-items-center mt-4 flex-wrap gap-3">
+            <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.core }}></div><span> Lecture</span></div>
+            <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.tutorial }}></div><span>Tutorial</span></div>
+            <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div><span>Lab</span></div>
+          </div>
+
+          {/* زر الفيدباك */}
+          <div className="text-center mt-3">
+            <button
+              className="btn btn-feedback"
+              onClick={() => { setSelectedTarget(null); setComment(""); setShowModal(true); }}
+              disabled={!scheduleIdCurrent}
+              title={!scheduleIdCurrent ? "Schedule ID is missing — switch group/level or reload." : "Give feedback"}
+            >
+              Give Feedback
+            </button>
+          </div>
+        </>
+      )}
+
+      {/* Pager لوضع All — ظاهر دائمًا حتى لو الجدول فاضي (المسج تظهر ومعها الأزرار) */}
       {viewMode === "all" && levelBuckets.length > 0 && (
         <div className="d-flex justify-content-center pager mt-4">
-          <button className="btn btn-outline-secondary" onClick={goPrevLevel} disabled={levelBuckets.length <= 1}>Previous Level</button>
+          <button className="btn btn-outline-secondary" onClick={goPrevLevel} disabled={levelBuckets.length <= 1}>
+            Previous Level
+          </button>
           <div className="small text-muted align-self-center mx-2">
             {levelPos + 1} / {levelBuckets.length}
           </div>
-          <button className="btn btn-outline-primary" onClick={goNextLevel} disabled={levelBuckets.length <= 1}>Next Level</button>
+          <button className="btn btn-outline-primary" onClick={goNextLevel} disabled={levelBuckets.length <= 1}>
+            Next Level
+          </button>
         </div>
       )}
 

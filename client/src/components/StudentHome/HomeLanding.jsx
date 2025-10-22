@@ -337,6 +337,23 @@ function StudentNotificationsPanel() {
   );
 }
 
+/* ===== بوب-أب يظهر فقط إذا ما فيه Level ===== */
+function LevelPromptModal({ open, onClose }) {
+  if (!open) return null;
+  return (
+    <div className="lvl-modal-backdrop">
+      <div className="lvl-modal-card">
+        <div className="lvl-modal-body">
+          To view your schedule, go to Profile and set your level.
+        </div>
+        <div className="lvl-modal-actions">
+          <button className="btn btn-primary" onClick={onClose}>OK</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ===== الصفحة الرئيسية ===== */
 export default function HomeLanding() {
   const navigate = useNavigate();
@@ -385,9 +402,37 @@ export default function HomeLanding() {
         <StudentNotificationsPanel />
       </section>
 
+      {/* البوب-أب: يظهر فقط إذا مافي Level */}
+      <LevelPromptModal open={showPopup} onClose={() => setShowPopup(false)} />
+
       <style>{`
         .student-home { background: #f8fbff; min-height: 100vh; }
         .hero { background: linear-gradient(135deg, #1766ff, #0a3ea7); padding: 80px 20px; }
+
+        /* Modal */
+        .lvl-modal-backdrop {
+          position: fixed; inset: 0;
+          background: rgba(0,0,0,.45);
+          display: flex; align-items: center; justify-content: center;
+          z-index: 2147483647;
+        }
+        .lvl-modal-card {
+          width: min(520px, 92vw);
+          background: #fff;
+          border-radius: 14px;
+          box-shadow: 0 10px 30px rgba(0,0,0,.2);
+          overflow: hidden;
+          animation: lvl-pop .15s ease-out;
+        }
+        .lvl-modal-body { padding: 18px; }
+        .lvl-modal-actions {
+          display: flex; justify-content: flex-end; gap: 8px;
+          padding: 12px 18px; border-top: 1px solid #eee; background: #fcfcfc;
+        }
+        @keyframes lvl-pop {
+          from { transform: translateY(6px); opacity: .7; }
+          to   { transform: translateY(0);   opacity: 1; }
+        }
       `}</style>
     </div>
   );
