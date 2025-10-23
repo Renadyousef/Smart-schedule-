@@ -24,6 +24,9 @@ RUN npm run build
 #Starts a new lightweight image based on Nginx.
 FROM nginx:alpine
 COPY --from=build /app/dist /usr/share/nginx/html
+
+# ✅ Copy our custom Nginx config-- fixes the reload
+COPY nginx.conf /etc/nginx/conf.d/default.conf
 #expose port to connnect to
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
