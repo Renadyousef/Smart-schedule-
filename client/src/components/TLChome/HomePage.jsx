@@ -5,6 +5,8 @@ import TLCProfile from "../Profiles/TLCProfile"; // ✅ استيراد البر�
 
 import FixedSchedule from './ViewSchudles'
 import Landing from "./Landing";
+import Footer from "../Footer/Footer";
+
 
 export default function HomePage({ onLogout }) {
   return (
@@ -22,6 +24,7 @@ export default function HomePage({ onLogout }) {
         {/* صفحة البروفايل */}
         <Route path="/account" element={<TLCProfile />} />
       </Routes>
+       <Footer />
     </Router>
   );
 }

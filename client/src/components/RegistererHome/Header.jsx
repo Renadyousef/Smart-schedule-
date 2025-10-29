@@ -106,7 +106,7 @@ export default function RegistrarHeader({
           <div className="navbar-nav me-auto">
             <NavLink className="nav-link" to="/">Home</NavLink>
             <NavLink className="nav-link" to="/registrar/electives">Offer Electives</NavLink>
-            <NavLink className="nav-link" to="/registrar/irregular">Irregular Students</NavLink>
+            <NavLink className="nav-link" to="/registrar/irregular/add">Irregular Students</NavLink>
 
             {/* === New: Notifications tab === */}
             <NavLink className="nav-link position-relative" to="/registrar/notifications">

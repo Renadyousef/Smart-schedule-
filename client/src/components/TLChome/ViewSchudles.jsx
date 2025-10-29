@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import "bootstrap/dist/css/bootstrap.min.css";
 import axios from "axios";
-import Footer from "../Footer/Footer";
+
 import API from "../../API_continer";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
@@ -426,7 +426,7 @@ export default function ViewSchedules() {
           </>
         )}
       </div>
-      <Footer />
+      
     </div>
   );
 }

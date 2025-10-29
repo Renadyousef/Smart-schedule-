@@ -1,20 +1,21 @@
 import { useEffect, useMemo, useState, useCallback } from "react";
 import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
-import API from '../../API_continer' // i wanna use this 
+import API from "../../API_continer.js";
+
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
 
-/* ---------- helpers: robust registrarId resolver ---------- */
+/* ===== Utility functions ===== */
 function readJSON(s) { try { return s ? JSON.parse(s) : null; } catch { return null; } }
 function toInt(v) { const n = Number(v); return Number.isFinite(n) ? Math.trunc(n) : null; }
-function b64urlDecode(str){
+function b64urlDecode(str) {
   try {
     const pad = "=".repeat((4 - (str.length % 4)) % 4);
-    const base64 = (str.replace(/-/g, "+").replace(/_/g, "/") + pad);
+    const base64 = str.replace(/-/g, "+").replace(/_/g, "/") + pad;
     return decodeURIComponent(escape(atob(base64)));
   } catch { return ""; }
 }
-function decodeJwt(token){
+function decodeJwt(token) {
   try {
     const [, payload] = token.split(".");
     if (!payload) return null;
@@ -34,7 +35,7 @@ function getAuth() {
   ].map(toInt).filter(Boolean);
   if (directKeys.length) return { token, registrarId: directKeys[0] };
 
-  const objectKeys = ["user","profile","account","currentUser","session","auth","registrar"];
+  const objectKeys = ["user", "profile", "account", "currentUser", "session", "auth", "registrar"];
   for (const src of [localStorage, sessionStorage]) {
     for (const k of objectKeys) {
       const obj = readJSON(src.getItem(k));
@@ -57,7 +58,7 @@ function getAuth() {
   return { token, registrarId: undefined };
 }
 
-/* ---------- mapping ---------- */
+/* ===== Mapping and Meta helpers ===== */
 function mapRow(r) {
   return {
     id: r.NotificationID ?? r.id ?? r.notificationid,
@@ -77,60 +78,104 @@ function mapRow(r) {
     data: r.Data ?? r.data ?? null,
     type: r.Type ?? r.type,
     title: r.Title ?? r.title ?? null,
-
     enrichedMeta: null,
   };
 }
 
-/* ---------- message composers (تجميع الوصف فقط، بدون الطلاب) ---------- */
 function pickArr(v) {
   if (Array.isArray(v)) return v;
   if (v == null) return [];
   if (typeof v === "string") return v.split(/[,|\n]/g).map(s => s.trim()).filter(Boolean);
   return [];
 }
-
-// عنوان افتراضي ذكي حسب نوع/كيان الإشعار
 function defaultTitleFor(n) {
   const ent = String(n?.entity || "").toLowerCase();
   const typ = String(n?.type || "").toLowerCase();
-  if (ent.includes("committeerequest") || typ === "request") {
-    return "Scheduler committee data request";
-  }
+  if (ent.includes("committeerequest") || typ === "request") return "Scheduler committee data request";
   return "New request";
 }
-
 function pickMeta(n) {
   const d = n.data || {};
   const m = n.enrichedMeta || {};
-  const resolvedTitle =
-    (d.title ?? n.title ?? m.title) || defaultTitleFor(n);
-
+  const resolvedTitle = (d.title ?? n.title ?? m.title) || defaultTitleFor(n);
   return {
     title: resolvedTitle,
     level: d.level ?? d.Level ?? m.level ?? null,
     neededFields: pickArr(d.neededFields ?? d.NeededFields ?? m.neededFields),
-    description:  d.description ?? d.Description ?? m.description ?? null,
+    description: d.description ?? d.Description ?? m.description ?? null,
     note: d.note ?? d.notes ?? m.note ?? null,
   };
 }
-
-function composeShortLine(n){
+function composeShortLine(n) {
   const meta = pickMeta(n);
   return `${meta.title}${meta.level ? ` (Level ${meta.level})` : ""}`;
 }
-
-function composeFullMessage(n){
+function composeFullMessage(n) {
   const meta = pickMeta(n);
   const lines = [];
   lines.push(`${meta.title}${meta.level ? ` (Level ${meta.level})` : ""}`);
   if (meta.neededFields.length) lines.push(`Required fields: ${meta.neededFields.join(", ")}`);
-  if (meta.description)         lines.push(String(meta.description));
-  if (meta.note)                lines.push(String(meta.note));
+  if (meta.description) lines.push(String(meta.description));
+  if (meta.note) lines.push(String(meta.note));
   return lines.join("\n");
 }
 
-/* ---------- component ---------- */
+/* ===== Theme ===== */
+const PAGE_CSS = `
+:root {
+  --brand-500:#1766ff;
+  --brand-600:#0d52d6;
+  --brand-700:#0a3ea7;
+  --brand-50:#ecf3ff;
+}
+.page-bg {
+  background: linear-gradient(180deg, #f8fbff 0%, #eef4ff 100%);
+  min-height: 100vh;
+  padding-top: 2rem;
+}
+.card {
+  border: 0;
+  border-radius: 1rem;
+  box-shadow: 0 8px 20px rgba(13,82,214,0.08);
+}
+.btn-outline-primary {
+  border-color: var(--brand-600);
+  color: var(--brand-600);
+}
+.btn-outline-primary:hover {
+  background: var(--brand-600);
+  color: #fff;
+}
+.badge.bg-primary {
+  background: var(--brand-600)!important;
+}
+.badge.bg-secondary {
+  background: #e9edff!important;
+  color: var(--brand-700);
+}
+.list-group-item:hover {
+  background: #f4f8ff;
+}
+.modal-content {
+  border-radius: 1rem;
+  box-shadow: 0 12px 28px rgba(7,42,119,0.2);
+}
+.modal-header {
+  background: linear-gradient(90deg,var(--brand-600),var(--brand-700));
+  color:#fff;
+  border-top-left-radius:1rem;
+  border-top-right-radius:1rem;
+}
+.modal-body {
+  background: #fff;
+}
+.alert-danger {
+  background: #fff2f2;
+  border: 1px solid #ffd5d5;
+}
+`;
+
+/* ===== Component ===== */
 export default function RegistrarNotifications() {
   const baseAuth = getAuth();
   const [registrarId, setRegistrarId] = useState(baseAuth.registrarId);
@@ -140,7 +185,6 @@ export default function RegistrarNotifications() {
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState("");
   const [onlyUnread, setOnlyUnread] = useState(false);
-
   const [selected, setSelected] = useState(null);
 
   const auth = useMemo(() => (token ? { headers: { Authorization: `Bearer ${token}` } } : {}), [token]);
@@ -158,35 +202,23 @@ export default function RegistrarNotifications() {
   }, [registrarId, token]);
 
   const load = useCallback(async () => {
-    if (!registrarId) { 
-      setLoading(false); 
+    if (!registrarId) {
+      setLoading(false);
       setErr("Missing registrarId in storage.");
       tryWhoAmI();
-      return; 
+      return;
     }
     try {
       setLoading(true);
       setErr("");
       const url = `/Notifications/view?receiverId=${registrarId}&limit=30${onlyUnread ? "&isRead=false" : ""}`;
       const res = await API.get(url, auth);
-      if (res.data?.success) {
-        setList((res.data.notifications || []).map(mapRow));
-      } else {
-        setList([]);
-        setErr(`Bad API shape: ${JSON.stringify(res.data)}`);
-      }
+      if (res.data?.success) setList((res.data.notifications || []).map(mapRow));
+      else { setList([]); setErr(`Bad API shape: ${JSON.stringify(res.data)}`); }
     } catch (e) {
-      const detail = e.response
-        ? `HTTP ${e.response.status} ${e.response.statusText} | ${e.config?.method?.toUpperCase()} ${e.config?.url}\n${JSON.stringify(e.response.data)}`
-        : e.request
-          ? `Network error (no response) | ${e.config?.method?.toUpperCase()} ${e.config?.url}`
-          : e.message;
-      console.error("registrar notifications load failed:", e);
-      setErr(detail);
+      setErr(e.message || "Failed to load notifications.");
       setList([]);
-    } finally {
-      setLoading(false);
-    }
+    } finally { setLoading(false); }
   }, [registrarId, token, onlyUnread]);
 
   useEffect(() => { load(); }, [load]);
@@ -194,11 +226,8 @@ export default function RegistrarNotifications() {
   const markRead = async (id) => {
     try {
       await API.post(`/Notifications/mark-read`, { ids: [id] }, auth);
-      setList((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
-    } catch (e) {
-      console.error("mark read failed:", e);
-      setErr("Failed to mark as read.");
-    }
+      setList(prev => prev.map(n => n.id === id ? { ...n, is_read: true } : n));
+    } catch (e) { setErr("Failed to mark as read."); }
   };
 
   const markAllRead = async () => {
@@ -206,26 +235,16 @@ export default function RegistrarNotifications() {
       if (!registrarId) return;
       await API.post(`/Notifications/mark-all-read`, { receiverId: registrarId }, auth);
       setList(prev => prev.map(n => ({ ...n, is_read: true })));
-    } catch (e) {
-      console.error("mark all read failed:", e);
-      setErr("Failed to mark all read.");
-    }
+    } catch { setErr("Failed to mark all read."); }
   };
 
-  // إثراء بدون students
   const enrichIfNeeded = useCallback(async (n) => {
-    const hasNeeded =
-      (n.data && (n.data.neededFields || n.data.NeededFields || n.data.level || n.data.title || n.data.description)) ||
-      (n.enrichedMeta && (n.enrichedMeta.neededFields || n.enrichedMeta.level || n.enrichedMeta.title || n.enrichedMeta.description));
-
     const isCR = n.entity === "CommitteeRequest" || n.entity === "CommitteeRequests";
-
-    if (hasNeeded || !isCR || !n.entity_id) return n;
-
+    if (!isCR || !n.entity_id) return n;
     try {
       const res = await API.get(`/registrarRequests/requests/${n.entity_id}`, auth);
       const head = res.data || {};
-      const enriched = {
+      return {
         ...n,
         enrichedMeta: {
           title: head.title ?? null,
@@ -238,11 +257,7 @@ export default function RegistrarNotifications() {
           description: head.description ?? null,
         }
       };
-      return enriched;
-    } catch (e) {
-      console.warn("enrichIfNeeded failed:", e?.message);
-      return n;
-    }
+    } catch { return n; }
   }, [auth]);
 
   const openModal = async (n) => {
@@ -252,84 +267,106 @@ export default function RegistrarNotifications() {
   };
   const closeModal = () => setSelected(null);
 
-  const unreadCount = list.filter((n) => !n.is_read).length;
+  const unreadCount = list.filter(n => !n.is_read).length;
   const visible = list.filter(n => onlyUnread ? !n.is_read : true);
   const fmt = (d) => (d ? new Date(d).toLocaleString() : "");
 
   return (
-    <div className="container mt-4" style={{ maxWidth: 760 }}>
-      <div className="card shadow-sm">
-        <div className="card-header d-flex justify-content-between align-items-center">
-          <div className="d-flex align-items-center gap-2">
-            <span className="fw-semibold">Notifications</span>
-            <div className="form-check form-switch m-0">
-              <input className="form-check-input" type="checkbox" id="onlyUnread" checked={onlyUnread} onChange={e => setOnlyUnread(e.target.checked)} />
-              <label className="form-check-label small" htmlFor="onlyUnread">Unread</label>
-            </div>
-          </div>
-          <div className="d-flex align-items-center gap-2">
-            <span className="badge bg-secondary">Unread: {unreadCount}</span>
-            <button className="btn btn-outline-secondary btn-sm" onClick={load}>⟳ Refresh</button>
-            <button className="btn btn-outline-primary btn-sm" onClick={markAllRead} disabled={unreadCount === 0}>✓ Mark all read</button>
-          </div>
-        </div>
+    <>
+      <style>{PAGE_CSS}</style>
+      <div className="page-bg">
+        <div className="container py-2">
 
-        <ul className="list-group list-group-flush">
-          {loading && <li className="list-group-item text-muted">Loading…</li>}
-          {!!err && !loading && (
-            <li className="list-group-item">
-              <div className="alert alert-danger mb-0" style={{ whiteSpace: "pre-wrap" }}>{err}</div>
-            </li>
-          )}
-          {!loading && !err && visible.length === 0 && (
-            <li className="list-group-item text-muted">No notifications.</li>
-          )}
-          {!loading && !err && visible.map((n) => (
-            <li
-              key={n.id}
-              className={`list-group-item d-flex justify-content-between align-items-start ${!n.is_read ? "bg-light" : ""}`}
-              onClick={() => openModal(n)}
-              style={{ cursor: "pointer" }}
-            >
-              <div style={{ flex: 1 }}>
-                <div className="fw-semibold">{composeShortLine(n)}</div>
-                <small className="text-muted">
-                  {fmt(n.created_at)}
-                  {n.entity ? ` • ${n.entity}` : ""}
-                </small>
+  {/* Hero with soft side space like AddIrregularStudent */}
+  <div
+    className="hero card text-white mb-5"
+    style={{
+      background: "linear-gradient(135deg, var(--brand-600), var(--brand-700))",
+      boxShadow: "0 12px 32px rgba(23,102,255,.4)",
+      borderRadius: "1.25rem",
+      padding: "3.5rem 2.5rem",
+      marginInline: "auto",     // keeps centered
+    }}
+  >
+            <h1 className="fw-bold mb-3 display-6">Notifications</h1>
+            <p className="fs-5 mb-0" style={{ opacity: 0.95 }}>
+              Stay updated with your latest system alerts and requests.
+            </p>
+          </div>
+
+          {/* Inbox */}
+          <div className="card shadow-sm">
+            <div className="card-header d-flex justify-content-between align-items-center bg-white">
+              <div className="d-flex align-items-center gap-2">
+                <span className="fw-semibold text-primary">Inbox</span>
+                <div className="form-check form-switch m-0">
+                  <input className="form-check-input" type="checkbox" id="onlyUnread"
+                    checked={onlyUnread}
+                    onChange={e => setOnlyUnread(e.target.checked)} />
+                  <label className="form-check-label small" htmlFor="onlyUnread">Unread only</label>
+                </div>
               </div>
-              {!n.is_read && <span className="badge bg-primary rounded-pill">New</span>}
-            </li>
-          ))}
-        </ul>
-      </div>
+              <div className="d-flex align-items-center gap-2">
+                <span className="badge bg-secondary">Unread: {unreadCount}</span>
+                <button className="btn btn-outline-secondary btn-sm" onClick={load}>⟳ Refresh</button>
+                <button className="btn btn-outline-primary btn-sm" onClick={markAllRead} disabled={!unreadCount}>✓ Mark all read</button>
+              </div>
+            </div>
 
-      {/* ===== Modal ===== */}
-      {selected && (
-        <div
+            <ul className="list-group list-group-flush">
+              {loading && <li className="list-group-item text-muted">Loading…</li>}
+              {!!err && !loading && (
+                <li className="list-group-item">
+                  <div className="alert alert-danger mb-0" style={{ whiteSpace: "pre-wrap" }}>{err}</div>
+                </li>
+              )}
+              {!loading && !err && visible.length === 0 && (
+                <li className="list-group-item text-muted">No notifications found.</li>
+              )}
+              {!loading && !err && visible.map((n) => (
+                <li
+                  key={n.id}
+                  className={`list-group-item d-flex justify-content-between align-items-start ${!n.is_read ? "bg-light" : ""}`}
+                  onClick={() => openModal(n)}
+                  style={{ cursor: "pointer" }}
+                >
+                  <div style={{ flex: 1 }}>
+                    <div className="fw-semibold">{composeShortLine(n)}</div>
+                    <small className="text-muted">{fmt(n.created_at)} {n.entity ? `• ${n.entity}` : ""}</small>
+                  </div>
+                  {!n.is_read && <span className="badge bg-primary rounded-pill">New</span>}
+                </li>
+              ))}
+            </ul>
+             </div>
+           </div>
+           </div>
+
+          {/* ===== Modal ===== */}
+          {selected && (
+          <div
           className="modal fade show"
           style={{ display: "block", background: "rgba(0,0,0,.5)" }}
           tabIndex={-1}
           role="dialog"
           aria-modal="true"
           onClick={closeModal}
-          onKeyDown={(e) => { if (e.key === "Escape") closeModal(); }}
-        >
-          <div className="modal-dialog modal-lg modal-dialog-centered" onClick={(e)=>e.stopPropagation()}>
+          onKeyDown={(e) => e.key === "Escape" && closeModal()}
+         >
+          <div className="modal-dialog modal-lg modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
             <div className="modal-content">
               <div className="modal-header">
                 <div>
                   <div className="fw-bold">{selected.receiver_name || "Receiver"}</div>
-                  <small className="text-muted">{fmt(selected.created_at)}</small>
+                  <small>{fmt(selected.created_at)}</small>
                 </div>
                 <div className="d-flex align-items-center gap-2">
-                  {!selected.is_read && <span className="badge bg-primary">New</span>}
+                  {!selected.is_read && <span className="badge bg-light text-dark">New</span>}
                   <button type="button" className="btn-close" aria-label="Close" onClick={closeModal}></button>
                 </div>
               </div>
 
               <div className="modal-body">
-                {/* Needed Fields chips */}
                 {(() => {
                   const meta = pickMeta(selected);
                   return meta.neededFields.length ? (
@@ -342,52 +379,14 @@ export default function RegistrarNotifications() {
                     </div>
                   ) : null;
                 })()}
-
-                {/* الرسالة المجمعة (تشمل description) */}
                 <div className="mb-0" style={{ whiteSpace: "pre-wrap" }}>
                   {composeFullMessage(selected)}
                 </div>
-
-                {/* From/To فقط إذا اختلفوا */}
-                {selected.created_by !== selected.receiver_id ? (
-                  <div className="row g-3 mt-3">
-                    <div className="col-md-6">
-                      <div className="card border-0 bg-light">
-                        <div className="card-body py-2">
-                          <div className="text-uppercase text-muted small">FROM (ID)</div>
-                          <div className="fw-semibold">{selected.created_by ?? "—"}</div>
-                          {(selected.sender_name || selected.sender_email || selected.sender_role) && (
-                            <div className="small text-muted">
-                              {selected.sender_name || "Unknown"}
-                              {selected.sender_email ? ` — ${selected.sender_email}` : ""}
-                              {selected.sender_role ? ` (${selected.sender_role})` : ""}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    <div className="col-md-6">
-                      <div className="card border-0 bg-light">
-                        <div className="card-body py-2">
-                          <div className="text-uppercase text-muted small">TO (ID)</div>
-                          <div className="fw-semibold">{selected.receiver_id ?? "—"}</div>
-                          {(selected.receiver_name || selected.receiver_email || selected.receiver_role) && (
-                            <div className="small text-muted">
-                              {selected.receiver_name || "Unknown"}
-                              {selected.receiver_email ? ` — ${selected.receiver_email}` : ""}
-                              {selected.receiver_role ? ` (${selected.receiver_role})` : ""}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                ) : null}
               </div>
             </div>
           </div>
         </div>
       )}
-    </div>
+    </>
   );
 }

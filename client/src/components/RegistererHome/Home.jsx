@@ -10,6 +10,7 @@ import RegistrarProfile from "../Profiles/RegistrarProfile.jsx";
 import OfferElective from "../OfferElective/ViewElectiveRequests.jsx";
 import RegistrarRequests from "./RegistrarRequests.jsx";
 import RegistrarNotifications from "./RegistrarNotifications.jsx";
+import Footer from "../Footer/Footer.jsx";
 
 // Small helper to read a friendly first name from storage
 function readJSON(s) { try { return s ? JSON.parse(s) : null; } catch { return null; } }
@@ -183,45 +184,53 @@ export default function Home() {
   }, []);
 
   return (
-    <Router>
-      <Header />
-      {/* Hero header to match other pages */}
-      <section className="hero d-flex align-items-center text-center text-white">
-        <div className="container">
-          <h1 className="fw-bold mb-3">Welcome {displayName}</h1>
-        </div>
-      </section>
-      <Routes>
-        {/* صفحة البداية (Home) */}
-        <Route path="/" element={<Dashboard />} />
+  <Router>
+    <Header />
 
-        {/* لو دخل المستخدم على /registrar نرجّعه لـ / (Dashboard) */}
-        <Route path="/registrar" element={<Navigate to="/" replace />} />
+    <Routes>
+      {/* ✅ Home page only (hero moved inside) */}
+      <Route
+        path="/"
+        element={
+          <>
+            <section className="hero d-flex align-items-center text-center text-white">
+              <div className="container">
+                <h1 className="fw-bold mb-3">Welcome {displayName}</h1>
+              </div>
+            </section>
+            <Dashboard /> {/* rest of dashboard content */}
+          </>
+        }
+      />
 
-        {/* الصفحات */}
-        <Route path="/registrar/irregular" element={<IrregularStudents />} />
-        <Route path="/registrar/irregular/add" element={<AddIrregularStudent />} />
-        <Route path="/registrar/requests" element={<RegistrarRequests />} />
-        <Route path="/registrar/electives" element={<OfferElective />} />
+      {/* باقي الصفحات */}
+      <Route path="/registrar" element={<Navigate to="/" replace />} />
+      <Route path="/registrar/irregular" element={<IrregularStudents />} />
+      <Route path="/registrar/irregular/add" element={<AddIrregularStudent />} />
+      <Route path="/registrar/requests" element={<RegistrarRequests />} />
+      <Route path="/registrar/electives" element={<OfferElective />} />
+      <Route path="/account" element={<RegistrarProfile />} />
+      <Route path="/requests" element={<RegistrarRequests />} />
+      <Route path="/registrar/notifications" element={<RegistrarNotifications />} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
 
-        {/* صفحة البروفايل */}
-        <Route path="/account" element={<RegistrarProfile />} />
 
-        {/* (اختياري) لو في /requests بدون /registrar */}
-        <Route path="/requests" element={<RegistrarRequests />} />
-        <Route path="/registrar/notifications" element={<RegistrarNotifications />} />
+ <Footer />
+    <style>{`
+      .hero {
+        background: linear-gradient(135deg, #1766ff, #0a3ea7);
+        padding: 80px 20px;
+      }
+      body {
+        background: #f8fbff;
+      }
+        footer {
+    margin-top: auto;
+  }
+    `}</style>
+  </Router>
+);
 
 
-        {/* ⚠️ إزالة التكرار الذي كان يكتب /registrar/requests مرة ثانية */}
-        {/* <Route path="/registrar/requests" element={<CommitteeRequests />} /> */}
-
-        {/* أي مسار غير معروف → رجوع للـ Home */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-      <style>{`
-        .hero { background: linear-gradient(135deg, #1766ff, #0a3ea7); padding: 80px 20px; }
-        body { background: #f8fbff; }
-      `}</style>
-    </Router>
-  );
 }

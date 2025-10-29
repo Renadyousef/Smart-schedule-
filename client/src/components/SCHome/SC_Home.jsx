@@ -9,7 +9,8 @@ import GeneratedSchedule from "./GeneratedSchedule.jsx";
 import ShareSchedule from "./ShareSchedule.jsx";
 import CreateRequest from "./CreateRequest.jsx";
 import ManageElectives from "../ElectivesSc.jsx";
-import Footer from "../Footer/Footer.jsx"; // ✅ استيراد الفوتر
+import Footer from "../Footer/Footer.jsx"; 
+import Dashboard from "../Pages/Dashboard.jsx";
 
 // ✅ استيراد صفحة الهوم (Landing)
 import SCHomeLanding from "../SCHome/SCHomeLanding.jsx";
@@ -32,9 +33,10 @@ export default function SC_Home({ onLogout }) {
         <Route path="/manage" element={<ManageRules />} />
         <Route path="/account" element={<SCCommitteeProfile />} />
         <Route path="/Electives/handel" element={<ManageElectives />} />
+         <Route path="/dashboard" element={<Dashboard />} />
       </Routes>
 
-      <Footer /> {/* ✅ الفوتر يظهر في جميع الصفحات */}
+      <Footer /> 
     </Router>
   );
 }

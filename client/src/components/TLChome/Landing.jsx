@@ -4,6 +4,7 @@ import axios from "axios";
 import "bootstrap/dist/css/bootstrap.min.css";
 import API from "../../API_continer";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:5000";
+import Header from "./Header";
 
 /* ---------- helpers ---------- */
 function safeParseJSON(s) {
@@ -254,153 +255,179 @@ export default function Landing() {
 
   return (
     <div className="tlc-home">
-      <section className="hero d-flex align-items-center text-center text-white"> 
-        <div className="container"> 
-          <h1 className="fw-bold mb-3">Welcome {displayName}</h1>
+      <section className="hero d-flex align-items-center text-center text-white">
+        <div className="container">
+          {/* smaller heading on phones */}
+          <h1 className="fw-bold mb-3 display-6 display-md-5">Welcome {displayName}</h1>
         </div>
       </section>
-      <div className="container my-5" style={{ maxWidth: 820 }}>
-      <div className="d-flex align-items-center justify-content-between mb-3">
-        <h1 className="m-0 fw-bold">Notification</h1>
-        <div className="d-flex align-items-center gap-2">
-          <span className="badge text-bg-primary">Unread: {unread}</span>
-          <button className="btn btn-outline-secondary btn-sm" onClick={load}>⟳ Refresh</button>
-          <button
-            className="btn btn-outline-success btn-sm"
-            onClick={markSelectedRead}
-            disabled={selectedIds.size === 0}
-            title="Mark selected as read"
-          >
-            ✓ Mark selected
-          </button>
-          <button className="btn btn-outline-danger btn-sm" onClick={clearAll}>
-            Clear All
-          </button>
-        </div>
-      </div>
 
-      <div className="card shadow-sm">
-        <div className="card-header d-flex justify-content-between align-items-center">
-          <div className="d-flex align-items-center gap-2">
-            <span className="fw-semibold">Notifications</span>
-            <div className="form-check form-switch m-0">
-              <input
-                className="form-check-input"
-                type="checkbox"
-                id="onlyUnread"
-                checked={onlyUnread}
-                onChange={(e) => setOnlyUnread(e.target.checked)}
-              />
-              <label className="form-check-label small" htmlFor="onlyUnread">
-                Unread only
-              </label>
-            </div>
-          </div>
-          <span className="badge bg-secondary">Shown: {visible.length}</span>
-        </div>
+      {/* content container: full width on xs, capped on md+ */}
+      <div className="container my-4 my-md-5">
+        <div className="row justify-content-center">
+          <div className="col-12 col-md-11 col-lg-9 col-xl-8">
 
-        <ul className="list-group list-group-flush">
-          {loading && <li className="list-group-item text-muted">Loading…</li>}
-          {!!err && !loading && (
-            <li className="list-group-item">
-              <div className="alert alert-danger mb-0" style={{ whiteSpace: "pre-wrap" }}>
-                {err}
-              </div>
-            </li>
-          )}
-          {!loading && !err && visible.length === 0 && (
-            <li className="list-group-item text-muted">No notifications.</li>
-          )}
+            <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap mb-3">
+              <h1 className="m-0 fw-bold fs-3">Notification</h1>
 
-          {!loading &&
-            !err &&
-            visible.map((n) => {
-              const meta = pickMeta(n);
-              const badgeClass =
-                (meta.action === "schedule_shared" && "text-bg-primary") ||
-                (meta.action === "schedule_approved" && "text-bg-success") ||
-                "text-bg-secondary";
-              return (
-                <li
-                  key={n.id}
-                  className={`list-group-item d-flex align-items-start ${!n.is_read ? "bg-light" : ""}`}
-                  style={{ cursor: "pointer" }}
+              {/* actions wrap on small screens */}
+              <div className="d-flex align-items-center justify-content-end flex-wrap gap-2 w-100 w-sm-auto">
+                <span className="badge text-bg-primary order-1 order-sm-0">Unread: {unread}</span>
+                <button className="btn btn-outline-secondary btn-sm order-3 order-sm-0" onClick={load}>⟳ Refresh</button>
+                <button
+                  className="btn btn-outline-success btn-sm order-4 order-sm-0"
+                  onClick={markSelectedRead}
+                  disabled={selectedIds.size === 0}
+                  title="Mark selected as read"
                 >
-                  <div className="form-check me-2 mt-1">
+                  ✓ Mark selected
+                </button>
+                <button className="btn btn-outline-danger btn-sm order-5 order-sm-0" onClick={clearAll}>
+                  Clear All
+                </button>
+              </div>
+            </div>
+
+            <div className="card shadow-sm">
+              <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div className="d-flex align-items-center gap-2 flex-wrap">
+                  <span className="fw-semibold">Notifications</span>
+                  <div className="form-check form-switch m-0">
                     <input
                       className="form-check-input"
                       type="checkbox"
-                      checked={selectedIds.has(n.id)}
-                      onChange={() => toggleSelect(n.id)}
+                      id="onlyUnread"
+                      checked={onlyUnread}
+                      onChange={(e) => setOnlyUnread(e.target.checked)}
                     />
+                    <label className="form-check-label small" htmlFor="onlyUnread">
+                      Unread only
+                    </label>
                   </div>
+                </div>
+                <span className="badge bg-secondary ms-auto">Shown: {visible.length}</span>
+              </div>
 
-                  <div className="flex-grow-1" onClick={() => openModal(n)}>
-                    <div className="d-flex align-items-center gap-2 flex-wrap">
-                      <span className={`badge ${badgeClass}`}>{n.type}</span>
-                      {meta.front && <span className="badge text-bg-light">front: {meta.front}</span>}
-                      {meta.subspace && <span className="badge text-bg-light">space: {meta.subspace}</span>}
-                      {meta.level != null && <span className="badge text-bg-info">L{meta.level}</span>}
-                      {meta.groupNo != null && <span className="badge text-bg-info">G{meta.groupNo}</span>}
-                      {meta.scheduleId != null && <span className="badge text-bg-dark">#{meta.scheduleId}</span>}
-                      {!n.is_read && <span className="badge text-bg-danger">Unread</span>}
-                      <small className="text-muted ms-auto">{fmtDate(n.created_at)}</small>
+              <ul className="list-group list-group-flush">
+                {loading && <li className="list-group-item text-muted">Loading…</li>}
+
+                {!!err && !loading && (
+                  <li className="list-group-item">
+                    <div className="alert alert-danger mb-0" style={{ whiteSpace: "pre-wrap" }}>
+                      {err}
                     </div>
+                  </li>
+                )}
 
-                    <div className="mt-2 fw-semibold">{composeShortLine(n)}</div>
-                    {n.message && (
-                      <div className="text-muted small mt-1" style={{ whiteSpace: "pre-wrap" }}>
-                        {n.message}
+                {!loading && !err && visible.length === 0 && (
+                  <li className="list-group-item text-muted">No notifications.</li>
+                )}
+
+                {!loading && !err && visible.map((n) => {
+                  const meta = pickMeta(n);
+                  const badgeClass =
+                    (meta.action === "schedule_shared" && "text-bg-primary") ||
+                    (meta.action === "schedule_approved" && "text-bg-success") ||
+                    "text-bg-secondary";
+                  return (
+                    <li
+                      key={n.id}
+                      className={`list-group-item d-flex align-items-start ${!n.is_read ? "bg-light" : ""}`}
+                      style={{ cursor: "pointer" }}
+                    >
+                      {/* keep checkbox accessible on mobile */}
+                      <div className="form-check me-2 mt-1 flex-shrink-0">
+                        <input
+                          className="form-check-input"
+                          type="checkbox"
+                          checked={selectedIds.has(n.id)}
+                          onChange={() => toggleSelect(n.id)}
+                        />
                       </div>
-                    )}
-                  </div>
-                </li>
-              );
-            })}
-        </ul>
-      </div>
 
-      {/* ===== Modal ===== */}
-      {selected && (
-        <div
-          className="modal fade show"
-          style={{ display: "block", background: "rgba(0,0,0,.5)" }}
-          tabIndex={-1}
-          role="dialog"
-          aria-modal="true"
-          onClick={closeModal}
-          onKeyDown={(e) => { if (e.key === "Escape") closeModal(); }}
-        >
-          <div className="modal-dialog modal-lg modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-content">
-              <div className="modal-header">
-                <div className="fw-bold">TLC Notification</div>
-                <div className="d-flex align-items-center gap-2">
-                  {!selected.is_read && <span className="badge bg-primary">New</span>}
-                  <button type="button" className="btn-close" aria-label="Close" onClick={closeModal}></button>
-                </div>
-              </div>
-              <div className="modal-body">
-                <div className="mb-3" style={{ whiteSpace: "pre-wrap" }}>
-                  {composeFullMessage(selected)}
-                </div>
+                      <div className="flex-grow-1" onClick={() => openModal(n)}>
+                        <div className="d-flex align-items-center gap-2 flex-wrap">
+                          <span className={`badge ${badgeClass}`}>{n.type}</span>
+                          {meta.front && <span className="badge text-bg-light">front: {meta.front}</span>}
+                          {meta.subspace && <span className="badge text-bg-light">space: {meta.subspace}</span>}
+                          {meta.level != null && <span className="badge text-bg-info">L{meta.level}</span>}
+                          {meta.groupNo != null && <span className="badge text-bg-info">G{meta.groupNo}</span>}
+                          {meta.scheduleId != null && <span className="badge text-bg-dark">#{meta.scheduleId}</span>}
+                          {!n.is_read && <span className="badge text-bg-danger">Unread</span>}
+                          {/* hide timestamp on very small screens */}
+                          <small className="text-muted ms-sm-auto d-none d-sm-inline">
+                            {fmtDate(n.created_at)}
+                          </small>
+                        </div>
 
-                {/* data dump for transparency */}
-                <details>
-                  <summary className="small text-muted">Details (Data)</summary>
-                  <pre className="bg-light p-2 rounded small">
-                    {JSON.stringify(selected.data, null, 2)}
-                  </pre>
-                </details>
-              </div>
+                        {/* make line truncatable on small screens */}
+                        <div className="mt-2 fw-semibold text-truncate">
+                          {composeShortLine(n)}
+                        </div>
+
+                        {n.message && (
+                          <div className="text-muted small mt-1 d-none d-sm-block" style={{ whiteSpace: "pre-wrap" }}>
+                            {n.message}
+                          </div>
+                        )}
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
+
+            {/* ===== Modal ===== */}
+            {selected && (
+              <div
+                className="modal fade show"
+                style={{ display: "block", background: "rgba(0,0,0,.5)" }}
+                tabIndex={-1}
+                role="dialog"
+                aria-modal="true"
+                onClick={closeModal}
+                onKeyDown={(e) => { if (e.key === "Escape") closeModal(); }}
+              >
+                {/* fullscreen on small devices */}
+                <div className="modal-dialog modal-lg modal-fullscreen-sm-down modal-dialog-centered" onClick={(e) => e.stopPropagation()}>
+                  <div className="modal-content">
+                    <div className="modal-header">
+                      <div className="fw-bold">TLC Notification</div>
+                      <div className="d-flex align-items-center gap-2">
+                        {!selected.is_read && <span className="badge bg-primary">New</span>}
+                        <button type="button" className="btn-close" aria-label="Close" onClick={closeModal}></button>
+                      </div>
+                    </div>
+                    <div className="modal-body">
+                      <div className="mb-3" style={{ whiteSpace: "pre-wrap" }}>
+                        {composeFullMessage(selected)}
+                      </div>
+
+                      {/* data dump for transparency */}
+                      <details>
+                        <summary className="small text-muted">Details (Data)</summary>
+                        <pre className="bg-light p-2 rounded small" style={{ overflowX: "auto" }}>
+                          {JSON.stringify(selected.data, null, 2)}
+                        </pre>
+                      </details>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
-      )}
       </div>
+
       <style>{`
         .tlc-home { background: #f8fbff; min-height: 100vh; }
-        .hero { background: linear-gradient(135deg, #1766ff, #0a3ea7); padding: 80px 20px; }
+        .hero { background: linear-gradient(135deg, #1766ff, #0a3ea7); padding: 64px 16px; }
+        @media (min-width: 576px) {
+          .hero { padding: 80px 20px; }
+        }
+        /* truncate long lines gracefully */
+        .text-truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
       `}</style>
     </div>
   );
