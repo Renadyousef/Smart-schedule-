@@ -2,8 +2,9 @@
 import pool from "../../DataBase_config/DB_config.js";
 import OpenAI from "openai";
 import jwt from "jsonwebtoken";
+import * as jsondiffpatch from "jsondiffpatch";
 
-function resolveUserId(req) {
+export function resolveUserId(req) {
   let userId =
     req.user?.id ??
     req.user?.UserID ??
@@ -75,6 +76,171 @@ const DAY_NAMES = [
 ];
 
 const DAY_INDEX = new Map(DAY_NAMES.map((name, index) => [name.toLowerCase(), index]));
+
+const diffPatcher = jsondiffpatch.create({
+  arrays: { detectMove: false },
+  objectHash(item) {
+    if (!item || typeof item !== "object") {
+      return JSON.stringify(item);
+    }
+    return (
+      item.slotId ??
+      item.sectionId ??
+      item.courseId ??
+      item.scheduleId ??
+      item.id ??
+      JSON.stringify(item)
+    );
+  },
+});
+
+function isUuid(value) {
+  if (typeof value !== "string") return false;
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/.test(
+    value.trim()
+  );
+}
+
+function normalizeDayName(day) {
+  if (!day) return null;
+  const lower = String(day).toLowerCase();
+  const match = DAY_NAMES.find((name) => name.toLowerCase() === lower);
+  return match ?? null;
+}
+
+function shortenTime(value) {
+  if (!value) return null;
+  const str = String(value);
+  if (str.length >= 5) return str.slice(0, 5);
+  return str;
+}
+
+async function fetchScheduleSnapshot(db, scheduleId) {
+  const scheduleRes = await db.query(
+    `SELECT "ScheduleID"           AS "scheduleId",
+            "SchedulingCommitteeID" AS "schedulingCommitteeId",
+            "Status"                AS "status",
+            "Level"                 AS "level",
+            "GroupNo"               AS "groupNo"
+       FROM "Schedule"
+      WHERE "ScheduleID"=$1`,
+    [scheduleId]
+  );
+
+  if (!scheduleRes.rowCount) {
+    return null;
+  }
+
+  const slotsRes = await db.query(
+    `SELECT s."SlotID"              AS "slotId",
+            s."CourseID"            AS "courseId",
+            s."DayOfWeek"           AS "day",
+            s."StartTime"           AS "start",
+            s."EndTime"             AS "end",
+            c.course_code            AS "courseCode",
+            c.course_name            AS "courseName",
+            c.course_type            AS "courseType",
+            c.level                  AS "courseLevel",
+            c.is_external            AS "isExternal",
+            sec."SectionID"         AS "sectionId",
+            COALESCE(sec."SectionNumber",1) AS "sectionNumber",
+            COALESCE(sec."Capacity",30)     AS "capacity",
+            sec."InstructorID"      AS "instructorId",
+            sec."Room"              AS "room"
+       FROM "ScheduleSlot" s
+       JOIN courses c ON c."CourseID"=s."CourseID"
+       LEFT JOIN "Sections" sec ON sec."SlotID"=s."SlotID"
+      WHERE s."ScheduleID"=$1
+      ORDER BY s."DayOfWeek", s."StartTime", s."SlotID"`,
+    [scheduleId]
+  );
+
+  const sectionsRes = await db.query(
+    `SELECT "SectionID"        AS "sectionId",
+            "ScheduleID"       AS "scheduleId",
+            "CourseID"         AS "courseId",
+            "SlotID"           AS "slotId",
+            COALESCE("SectionNumber",1) AS "sectionNumber",
+            COALESCE("Capacity",30)     AS "capacity",
+            "InstructorID"     AS "instructorId",
+            "Room"             AS "room"
+       FROM "Sections"
+      WHERE "ScheduleID"=$1
+      ORDER BY "SectionID"`,
+    [scheduleId]
+  );
+
+  const schedule = scheduleRes.rows[0];
+  const slots = slotsRes.rows.map((slot) => ({
+    ...slot,
+    day: normalizeDayName(slot.day),
+    start: shortenTime(slot.start),
+    end: shortenTime(slot.end),
+  }));
+
+  return {
+    schedule,
+    slots,
+    sections: sectionsRes.rows,
+  };
+}
+
+async function recordScheduleHistory({
+  db,
+  scheduleId,
+  userId = null,
+  summary = null,
+  changeNote = null,
+}) {
+  const client = db ?? pool;
+  const snapshot = await fetchScheduleSnapshot(client, scheduleId);
+  if (!snapshot) return null;
+
+  const previousRes = await client.query(
+    `SELECT version_no AS "versionNo", snapshot
+       FROM schedule_history
+      WHERE schedule_id=$1
+      ORDER BY version_no DESC
+      LIMIT 1`,
+    [scheduleId]
+  );
+
+  const previous = previousRes.rowCount ? previousRes.rows[0] : null;
+  const versionNo = (previous?.versionNo ?? 0) + 1;
+
+  let diff = null;
+  if (previous?.snapshot) {
+    diff = diffPatcher.diff(previous.snapshot, snapshot) ?? null;
+    if (diff && Object.keys(diff).length === 0) {
+      diff = null;
+    }
+  }
+
+  const slotCount = Array.isArray(snapshot.slots) ? snapshot.slots.length : 0;
+  const summaryText = summary ?? (versionNo === 1 ? "Initial snapshot" : "Schedule updated");
+  const changedBy = isUuid(userId) ? userId.trim() : null;
+
+  await client.query(
+    `INSERT INTO schedule_history
+       (schedule_id, version_no, snapshot, diff, summary, status, level, group_no, slot_count, changed_by, change_note)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+    [
+      scheduleId,
+      versionNo,
+      snapshot,
+      diff,
+      summaryText,
+      snapshot.schedule?.status ?? null,
+      snapshot.schedule?.level ?? null,
+      snapshot.schedule?.groupNo ?? null,
+      slotCount,
+      changedBy,
+      changeNote ?? null,
+    ]
+  );
+
+  return { versionNo, diff };
+}
 
 function formatTime(hour, minute) {
   return `${String(hour).padStart(2, "0")}:${String(minute).padStart(2, "0")}`;
@@ -185,7 +351,7 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 /* ---------- Helpers ---------- */
 
 // In your schema SchedulingCommitteeID == UserID
-async function getSchedulingCommitteeId(userId) {
+export async function getSchedulingCommitteeId(userId) {
   const r = await pool.query(
     `SELECT "SchedulingCommitteeID"
        FROM "SchedulingCommittee"
@@ -243,15 +409,6 @@ function parseTimeToMinutes(value) {
   const [hour, minute = 0] = parts;
   if (!Number.isFinite(hour) || !Number.isFinite(minute)) return null;
   return hour * 60 + minute;
-}
-
-function normalizeDayName(value) {
-  if (!value) return null;
-  const key = value.trim().toLowerCase();
-  for (const day of DAY_NAMES) {
-    if (day.toLowerCase() === key) return day;
-  }
-  return null;
 }
 
 function parseDayConstraints(raw) {
@@ -429,7 +586,19 @@ export const initSchedule = async (req, res) => {
        RETURNING "ScheduleID"`,
       [scId]
     );
-    res.json({ scheduleId: s.rows[0].ScheduleID });
+    const newScheduleId = s.rows[0].ScheduleID;
+
+    try {
+      await recordScheduleHistory({
+        scheduleId: newScheduleId,
+        userId,
+        summary: "Schedule initialized",
+      });
+    } catch (historyErr) {
+      console.error("recordScheduleHistory:initSchedule", historyErr);
+    }
+
+    res.json({ scheduleId: newScheduleId });
   } catch (e) {
     console.error("initSchedule:", e);
     res.status(500).json({ msg: "Failed to init schedule", error: e.message });
@@ -608,6 +777,17 @@ export const addExternalSlot = async (req, res) => {
       [workingScheduleId, courseId, slot.rows[0].SlotID, sectionNumber || 1, capacity || 30]
     );
 
+    try {
+      await recordScheduleHistory({
+        db: client,
+        scheduleId: workingScheduleId,
+        userId,
+        summary: "Added external slot",
+      });
+    } catch (historyErr) {
+      console.error("recordScheduleHistory:addExternalSlot", historyErr);
+    }
+
     await client.query("COMMIT");
 
     res.status(201).json({
@@ -735,6 +915,13 @@ export const autoListAndPrepareInternal = async (req, res) => {
 export const generatePreliminarySchedule = async (req, res) => {
   try {
     const { scheduleId } = req.params;
+
+    const scheduleIdNumeric = Number(scheduleId);
+    if (!Number.isFinite(scheduleIdNumeric)) {
+      return res.status(400).json({ msg: "Invalid schedule id" });
+    }
+
+    const userId = resolveUserId(req) ?? null;
 
     const scheduleRow = await pool.query(
       `SELECT "SchedulingCommitteeID","Level"
@@ -991,8 +1178,21 @@ Return ONLY JSON array:
     if (placedCount > 0) {
       await pool.query(
         `UPDATE "Schedule" SET "Status"='generated' WHERE "ScheduleID"=$1`,
-        [scheduleId]
+        [scheduleIdNumeric]
       );
+    }
+
+    try {
+      await recordScheduleHistory({
+        scheduleId: scheduleIdNumeric,
+        userId,
+        summary: placedCount
+          ? `Generated preliminary schedule (+${placedCount} slots)`
+          : "Ran preliminary generation",
+        changeNote: conflicts.length ? JSON.stringify({ conflicts }) : null,
+      });
+    } catch (historyErr) {
+      console.error("recordScheduleHistory:generatePreliminarySchedule", historyErr);
     }
 
     res.json({
@@ -1038,10 +1238,23 @@ export const listAllSlotsForGrid = async (req, res) => {
 export const shareSchedule = async (req, res) => {
   try {
     const { scheduleId } = req.params;
+    const userId = resolveUserId(req) ?? null;
+    const numeric = Number(scheduleId);
+    const scheduleIdForHistory = Number.isFinite(numeric) ? numeric : scheduleId;
     await pool.query(
       `UPDATE "Schedule" SET "Status"='shared' WHERE "ScheduleID"=$1`,
       [scheduleId]
     );
+
+    try {
+      await recordScheduleHistory({
+        scheduleId: scheduleIdForHistory,
+        userId,
+        summary: "Shared schedule",
+      });
+    } catch (historyErr) {
+      console.error("recordScheduleHistory:shareSchedule", historyErr);
+    }
     res.json({ msg: "Schedule shared with TLC" });
   } catch (e) {
     console.error("shareSchedule:", e);
@@ -1088,6 +1301,16 @@ export const approveSchedule = async (req, res) => {
       `UPDATE "Schedule" SET "Status"='finalized' WHERE "ScheduleID"=$1`,
       [scheduleId]
     );
+
+    try {
+      await recordScheduleHistory({
+        scheduleId,
+        userId,
+        summary: "Finalized schedule",
+      });
+    } catch (historyErr) {
+      console.error("recordScheduleHistory:approveSchedule", historyErr);
+    }
 
     const scheduleLevel = current.rows[0]?.Level ?? null;
     const scheduleGroup = current.rows[0]?.GroupNo ?? null;
@@ -1281,6 +1504,17 @@ export const createManualSlot = async (req, res) => {
       ]
     );
 
+    try {
+      await recordScheduleHistory({
+        db: client,
+        scheduleId: scheduleIdNumeric,
+        userId,
+        summary: "Added slot manually",
+      });
+    } catch (historyErr) {
+      console.error("recordScheduleHistory:createManualSlot", historyErr);
+    }
+
     await client.query("COMMIT");
 
     res
@@ -1345,6 +1579,17 @@ export const updateScheduleSlot = async (req, res) => {
       [day, norm(start), norm(end), slotId]
     );
 
+    try {
+      await recordScheduleHistory({
+        db: client,
+        scheduleId: slotRow.rows[0].ScheduleID,
+        userId,
+        summary: "Updated slot",
+      });
+    } catch (historyErr) {
+      console.error("recordScheduleHistory:updateScheduleSlot", historyErr);
+    }
+
     await client.query("COMMIT");
 
     res.json({ msg: "Slot updated", scheduleId: slotRow.rows[0].ScheduleID });
@@ -1401,6 +1646,17 @@ export const removeScheduleSlot = async (req, res) => {
       `DELETE FROM "ScheduleSlot" WHERE "SlotID"=$1`,
       [slotId]
     );
+
+    try {
+      await recordScheduleHistory({
+        db: client,
+        scheduleId: slotRow.rows[0].ScheduleID,
+        userId,
+        summary: "Removed slot",
+      });
+    } catch (historyErr) {
+      console.error("recordScheduleHistory:removeScheduleSlot", historyErr);
+    }
 
     await client.query("COMMIT");
 

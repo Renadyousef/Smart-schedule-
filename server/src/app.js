@@ -22,7 +22,7 @@ import TlcSchdules from './routes/TlcRoutes.js'
 import Electives_on_sc from './routes/ElectivesOffersRoute.js'
 import notificationsRouter from "./routes/notificationsRoutes.js";
 import notificationsRoutes from "./routes/notifications.routes.js";
-
+import historyRoutes from "./routes/HistoryRoutes.js";
 import stNotificationsRouter from "./routes/stNotifications.routes.js";
 import notifactionRouterSC from "./routes/notifactionRouterSC.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
@@ -71,6 +71,7 @@ app.use("/api/feedback", feedbackRoutes);
 app.use("/registrarRequests", RegistrarRequestsRoutes);
 // ...
 app.use("/api/notifications", notificationsRouter);
+app.use("/history", historyRoutes);
 
 app.use("/createRequests", CreateRequestsRoutes);
 app.use("/api/st-notifications", stNotificationsRouter);

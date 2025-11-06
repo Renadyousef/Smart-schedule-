@@ -43,6 +43,7 @@ export default function Header({ onLogout }) {
             <LinkEl to="/external-courses">External Courses</LinkEl>
             <LinkEl to="/internal-courses">Internal Courses</LinkEl>
             <LinkEl to="/generated-schedule">Generated Schedule</LinkEl>
+                 <LinkEl to="/history">History</LinkEl>
             <LinkEl to="/share-schedule">Share Schedule</LinkEl>
             <LinkEl to="/manage">Manage scheduling rules</LinkEl>
             <NavLink className="nav-link" to="/requests/new">Create Request</NavLink>

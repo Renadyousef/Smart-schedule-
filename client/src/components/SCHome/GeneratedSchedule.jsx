@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback, useRef } from "react";
 import axios from "axios";
 import { Container, Spinner, Alert, Button, Nav, Modal, Form, Row, Col } from "react-bootstrap";
+import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import API from "../../API_continer"; // ✅ تمّت الإضافة
 
@@ -80,6 +81,7 @@ function timeToMinutes(time) {
 }
 
 export default function GeneratedSchedule() {
+  const navigate = useNavigate();
   const [schedules, setSchedules] = useState([]);
   const [scheduleId, setScheduleId] = useState(() => {
     if (typeof window === "undefined") return null;
@@ -718,6 +720,9 @@ export default function GeneratedSchedule() {
   };
   return (
     <Container className="my-4">
+      <div className="d-flex justify-content-end mb-3">
+        <Button variant="outline-secondary" onClick={() => navigate("/history")}>View History</Button>
+      </div>
       <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <Nav
           variant="pills"
