@@ -1,5 +1,10 @@
 import pool from "../../DataBase_config/DB_config.js";
-import { resolveUserId, getSchedulingCommitteeId } from "./scheduleController.js";
+import {
+  resolveUserId,
+  getSchedulingCommitteeId,
+  scopeCommitteeFilter,
+  isGlobalScheduleSharingEnabled,
+} from "./scheduleController.js";
 
 function toInteger(value) {
   if (value === undefined || value === null || value === "") return null;
@@ -38,6 +43,7 @@ export const listHistory = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
 
     const levelFilter = toInteger(req.query.level);
     const groupFilter = toInteger(req.query.groupNo ?? req.query.group);
@@ -50,8 +56,13 @@ export const listHistory = async (req, res) => {
     const page = Number.isFinite(pageRaw) ? Math.max(pageRaw, 1) : 1;
     const offset = (page - 1) * limit;
 
-    const params = [scId];
-    const where = [`sch."SchedulingCommitteeID" = $${params.length}`];
+    const params = [];
+    const where = [];
+
+    if (scFilter !== null) {
+      params.push(scFilter);
+      where.push(`sch."SchedulingCommitteeID" = $${params.length}`);
+    }
 
     if (scheduleFilter !== null) {
       params.push(scheduleFilter);
@@ -77,6 +88,10 @@ export const listHistory = async (req, res) => {
     const limitIdx = params.length;
     params.push(offset);
     const offsetIdx = params.length;
+
+    if (!where.length) {
+      where.push("1=1");
+    }
 
     const sql = `
       SELECT h.history_id,
@@ -126,6 +141,7 @@ export const getHistoryEntry = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
 
     const historyRes = await pool.query(
       `SELECT h.history_id,
@@ -144,8 +160,9 @@ export const getHistoryEntry = async (req, res) => {
          FROM schedule_history h
          JOIN "Schedule" sch ON sch."ScheduleID" = h.schedule_id
         WHERE h.history_id = $1
+          AND ($2::int IS NULL OR sch."SchedulingCommitteeID" = $2)
         LIMIT 1`,
-      [historyId]
+      [historyId, scFilter]
     );
 
     if (!historyRes.rowCount) {
@@ -153,7 +170,7 @@ export const getHistoryEntry = async (req, res) => {
     }
 
     const historyRow = historyRes.rows[0];
-    if (historyRow.ownerId !== scId) {
+    if (!isGlobalScheduleSharingEnabled && historyRow.ownerId !== scId) {
       return res.status(403).json({ msg: "Forbidden" });
     }
 

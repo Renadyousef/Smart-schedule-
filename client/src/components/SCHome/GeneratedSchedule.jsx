@@ -1,9 +1,18 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
 import axios from "axios";
 import { Container, Spinner, Alert, Button, Nav, Modal, Form, Row, Col } from "react-bootstrap";
 import { useNavigate } from "react-router-dom";
 import "bootstrap/dist/css/bootstrap.min.css";
 import API from "../../API_continer"; // ✅ تمّت الإضافة
+import supabase from "../../supabaseClient";
+import {
+  getScheduleCommentsArray,
+  getScheduleListArray,
+  getScheduleGridArray,
+  getScheduleDraftMap,
+  getSchedulePresenceMap,
+  ySchedule,
+} from "../../collab/yjsClient";
 
 /* ====== Constants ====== */
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
@@ -41,6 +50,31 @@ const EVENT_NAME = "sc-schedule-changed";
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 const fallback = axios.create({ baseURL: API_BASE });
 const http = API || fallback;
+const CLIENT_ID_KEY = "sc.collabClientId";
+const ACTIVE_PRESENCE_WINDOW = 15000;
+
+const getActorName = () => {
+  if (typeof window === "undefined") return "Committee member";
+  return (
+    window.localStorage.getItem("fullName") ||
+    window.localStorage.getItem("name") ||
+    window.localStorage.getItem("email") ||
+    "Committee member"
+  );
+};
+
+const getClientId = () => {
+  if (typeof window === "undefined") {
+    return `ss-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+  }
+  const existing = window.localStorage.getItem(CLIENT_ID_KEY);
+  if (existing) return existing;
+  const generated =
+    globalThis.crypto?.randomUUID?.() ||
+    `client-${Date.now()}-${Math.round(Math.random() * 1e6)}`;
+  window.localStorage.setItem(CLIENT_ID_KEY, generated);
+  return generated;
+};
 
 function withAuth(config = {}) {
   if (typeof window === "undefined") return config;
@@ -54,6 +88,47 @@ function withAuth(config = {}) {
     },
   };
 }
+
+const scheduleListShared = getScheduleListArray();
+const scheduleCommentsShared = getScheduleCommentsArray();
+
+const toPlainArray = (yArray) =>
+  yArray
+    .toArray()
+    .map((entry) => (entry && typeof entry.toJSON === "function" ? entry.toJSON() : entry));
+
+const toPlainMap = (yMap) => {
+  if (!yMap) return {};
+  const entries = {};
+  yMap.forEach((value, key) => {
+    entries[key] = value && typeof value.toJSON === "function" ? value.toJSON() : value;
+  });
+  return entries;
+};
+
+const getSharedScheduleSnapshot = () => toPlainArray(scheduleListShared);
+const getSharedCommentsSnapshot = () =>
+  toPlainArray(scheduleCommentsShared).sort((a, b) => {
+    const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return aTime - bTime;
+  });
+
+const replaceArrayContents = (yArray, values) => {
+  if (!yArray) return;
+  if (yArray.length) {
+    yArray.delete(0, yArray.length);
+  }
+  if (Array.isArray(values) && values.length) {
+    yArray.push(values);
+  }
+};
+
+const formatTimestamp = (value) => {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toLocaleString();
+};
 
 const ADD_FORM_TEMPLATE = {
   courseCode: "",
@@ -80,9 +155,128 @@ function timeToMinutes(time) {
   return Number(h) * 60 + Number(m);
 }
 
+const buildScheduleTable = (slots = []) => {
+  const normalizedSlots = Array.isArray(slots) ? slots : [];
+  const tableData = {};
+  const baseSectionByCourse = {};
+
+  for (const slot of normalizedSlots) {
+    if (slot?.is_external && slot.course_code) {
+      const sectionNum = Number(slot.section_number);
+      if (Number.isFinite(sectionNum)) {
+        const existing = baseSectionByCourse[slot.course_code];
+        baseSectionByCourse[slot.course_code] =
+          existing === undefined ? sectionNum : Math.min(existing, sectionNum);
+      }
+    }
+  }
+
+  for (const slot of normalizedSlots) {
+    if (!slot) continue;
+    const day = slot.day;
+    if (!tableData[day]) tableData[day] = {};
+    const start = slot.start;
+    const end = slot.end;
+    let label = `${start} - ${end}`;
+
+    let type = "lab";
+    let labelType = "Lab";
+    let subtitle = "Lab";
+    let span = 1;
+    if (slot.is_external) {
+      type = "core";
+      labelType = "Lecture";
+      subtitle = "Lecture";
+      const sectionNum = Number(slot.section_number);
+      const base = baseSectionByCourse[slot.course_code];
+      if (Number.isFinite(sectionNum) && Number.isFinite(base)) {
+        const diff = sectionNum - base;
+        if (diff === 1) {
+          type = "tutorial";
+          labelType = "Tutorial";
+          subtitle = "Tutorial";
+        } else if (diff >= 2) {
+          type = "lab";
+          labelType = "Lab";
+          subtitle = "Lab";
+        }
+      }
+    } else {
+      labelType = "Internal";
+      subtitle = "Internal";
+    }
+
+    const durationMinutes = Math.max(timeToMinutes(slot.end) - timeToMinutes(slot.start), 0);
+    const startIdx = START_TO_INDEX[start];
+    if (startIdx !== undefined) {
+      label = TIMES[startIdx];
+      const slotEnd = SLOT_PARTS[startIdx].end;
+      const nextEnd = SLOT_PARTS[startIdx + 1]?.end;
+      if (end === nextEnd) {
+        span = 2;
+      } else if (end === slotEnd) {
+        span = 1;
+      } else if (durationMinutes >= 100) {
+        span = 2;
+      }
+      if (span > 1) {
+        span = Math.min(span, TIMES.length - startIdx);
+      }
+    } else if (durationMinutes >= 100) {
+      span = 2;
+    }
+
+    if (!slot.is_external) {
+      const isLectureDay = INTERNAL_LECTURE_DAYS.has(day);
+      const isConnectedLecture = span > 1;
+      if (isLectureDay || isConnectedLecture) {
+        type = "core";
+        labelType = "Lecture";
+        subtitle = "Lecture";
+      } else {
+        type = "tutorial";
+        labelType = "Tutorial";
+        subtitle = "Tutorial";
+      }
+    }
+
+    const baseEntry = {
+      subject: slot.course_code + " " + (slot.course_name || ""),
+      room: slot.section_number ? `Sec ${slot.section_number}` : "",
+      type,
+      labelType,
+      subtitle,
+      span,
+    };
+
+    for (let offset = 0; offset < span; offset += 1) {
+      const targetIdx = (startIdx ?? -1) + offset;
+      const targetLabel = TIMES[targetIdx] ?? label;
+      if (!targetLabel) break;
+
+      const cellEntry = {
+        ...baseEntry,
+        spanPart: span > 1 ? offset + 1 : null,
+        spanTotal: span,
+      };
+
+      const cell = tableData[day][targetLabel];
+      if (!cell) {
+        tableData[day][targetLabel] = cellEntry;
+      } else if (Array.isArray(cell)) {
+        cell.push(cellEntry);
+      } else {
+        tableData[day][targetLabel] = [cell, cellEntry];
+      }
+    }
+  }
+
+  return tableData;
+};
+
 export default function GeneratedSchedule() {
   const navigate = useNavigate();
-  const [schedules, setSchedules] = useState([]);
+  const [schedules, setSchedules] = useState(() => getSharedScheduleSnapshot());
   const [scheduleId, setScheduleId] = useState(() => {
     if (typeof window === "undefined") return null;
     const stored = window.localStorage.getItem(STORAGE_KEY);
@@ -91,10 +285,9 @@ export default function GeneratedSchedule() {
     return Number.isNaN(parsed) ? null : parsed;
   });
   const scheduleIdRef = useRef(scheduleId);
-  const [scheduleData, setScheduleData] = useState({});
   const [slotList, setSlotList] = useState([]);
   const [showEditor, setShowEditor] = useState(false);
-  const [slotEdits, setSlotEdits] = useState({});
+  const [slotEdits, setSlotEditsState] = useState({});
   const [editorMsg, setEditorMsg] = useState(null);
   const [editorError, setEditorError] = useState(null);
   const [savingSlotId, setSavingSlotId] = useState(null);
@@ -105,6 +298,39 @@ export default function GeneratedSchedule() {
   const [msg, setMsg] = useState(null);
   const [loadingList, setLoadingList] = useState(true);
   const [approving, setApproving] = useState(false);
+  const [comments, setComments] = useState(() => getSharedCommentsSnapshot());
+  const [newComment, setNewComment] = useState("");
+  const [sharedMeta, setSharedMeta] = useState(() => ({
+    updatedAt: ySchedule.get("lastUpdatedAt") || null,
+    updatedBy: ySchedule.get("lastUpdatedBy") || null,
+  }));
+  const [presence, setPresence] = useState({});
+  const [clientId] = useState(() => getClientId());
+  const [actorName, setActorName] = useState(() => getActorName());
+  const scheduleData = useMemo(() => buildScheduleTable(slotList), [slotList]);
+  const activeCollaborators = useMemo(() => {
+    const now = Date.now();
+    const entries = Object.values(presence || {});
+    return entries.filter((entry) => {
+      if (!entry) return false;
+      if (!entry.lastSeen) return true;
+      const ts = new Date(entry.lastSeen).getTime();
+      if (!Number.isFinite(ts)) return false;
+      return now - ts < ACTIVE_PRESENCE_WINDOW;
+    });
+  }, [presence]);
+  const collaboratorBadges = useMemo(
+    () =>
+      activeCollaborators.map((entry) => ({
+        id: entry?.id || entry?.name || `${entry?.scheduleId || "collab"}`,
+        label: entry?.id === clientId ? "You" : entry?.name || "Member",
+      })),
+    [activeCollaborators, clientId]
+  );
+
+  useEffect(() => {
+    setActorName(getActorName());
+  }, []);
 
   const persistScheduleId = useCallback((value) => {
     if (typeof window === "undefined") return;
@@ -134,52 +360,124 @@ export default function GeneratedSchedule() {
     [broadcastScheduleId, persistScheduleId]
   );
 
-  /* ---- Load all schedules ---- */
-  useEffect(() => {
-    async function fetchSchedules() {
-      setLoadingList(true);
-      try {
-        let { data } = await http.get("/schedule/list", withAuth());
-        let rows = data ?? [];
-
-        if (!rows.length) {
-          try {
-            const { data: created } = await http.post(
-              "/schedule/init",
-              null,
-              withAuth()
-            );
-            if (created?.scheduleId) {
-              const refreshed = await http.get("/schedule/list", withAuth());
-              rows = refreshed.data ?? [];
-            }
-          } catch (err) {
-            console.error("Init schedule on empty list failed:", err);
-          }
-        }
-
-        setSchedules(rows);
-        if (rows.length) {
-          const current = scheduleIdRef.current;
-          const preferred = rows.some((s) => s.ScheduleID === current)
-            ? current
-            : Number(rows[0].ScheduleID);
-          updateActiveSchedule(preferred, false);
-        } else {
-          updateActiveSchedule(null, false);
-        }
-      } catch (err) {
-        console.error("Fetch schedules failed:", err);
-      } finally {
-        setLoadingList(false);
+  const syncSchedulesFromShared = useCallback(
+    (rows = []) => {
+      setSchedules(rows);
+      if (!rows.length) {
+        updateActiveSchedule(null, false);
+        return;
       }
+      const current = scheduleIdRef.current;
+      const preferred = rows.some((s) => s.ScheduleID === current)
+        ? current
+        : Number(rows[0].ScheduleID);
+      updateActiveSchedule(preferred, false);
+    },
+    [updateActiveSchedule]
+  );
+
+  useEffect(() => {
+    const handleListChange = () => {
+      syncSchedulesFromShared(getSharedScheduleSnapshot());
+    };
+    const handleCommentsChange = () => {
+      setComments(getSharedCommentsSnapshot());
+    };
+
+    handleListChange();
+    handleCommentsChange();
+
+    scheduleListShared.observe(handleListChange);
+    scheduleCommentsShared.observe(handleCommentsChange);
+
+    return () => {
+      scheduleListShared.unobserve(handleListChange);
+      scheduleCommentsShared.unobserve(handleCommentsChange);
+    };
+  }, [syncSchedulesFromShared]);
+
+  useEffect(() => {
+    const observer = (event) => {
+      if (
+        event.keysChanged.has("lastUpdatedAt") ||
+        event.keysChanged.has("lastUpdatedBy")
+      ) {
+        setSharedMeta({
+          updatedAt: ySchedule.get("lastUpdatedAt") || null,
+          updatedBy: ySchedule.get("lastUpdatedBy") || null,
+        });
+      }
+    };
+    ySchedule.observe(observer);
+    return () => ySchedule.unobserve(observer);
+  }, []);
+
+  const loadSchedules = useCallback(async () => {
+    const requestVersion = Date.now();
+    setLoadingList(true);
+    try {
+      let { data } = await http.get("/schedule/list", withAuth());
+      let rows = data ?? [];
+
+      if (!rows.length) {
+        try {
+          const { data: created } = await http.post(
+            "/schedule/init",
+            null,
+            withAuth()
+          );
+          if (created?.scheduleId) {
+            const refreshed = await http.get("/schedule/list", withAuth());
+            rows = refreshed.data ?? [];
+          }
+        } catch (err) {
+          console.error("Init schedule on empty list failed:", err);
+        }
+      }
+
+      const currentVersion = ySchedule.get("listVersion") || 0;
+      if (requestVersion < currentVersion) {
+        return;
+      }
+
+      replaceArrayContents(scheduleListShared, rows);
+      ySchedule.set("listVersion", requestVersion);
+      const actor =
+        typeof window === "undefined"
+          ? "System"
+          : window.localStorage.getItem("fullName") ||
+            window.localStorage.getItem("email") ||
+            "Committee member";
+      ySchedule.set("lastUpdatedAt", new Date().toISOString());
+      ySchedule.set("lastUpdatedBy", actor);
+      syncSchedulesFromShared(rows);
+    } catch (err) {
+      console.error("Fetch schedules failed:", err);
+    } finally {
+      setLoadingList(false);
     }
-    fetchSchedules();
-  }, [updateActiveSchedule]);
+  }, [syncSchedulesFromShared]);
+
+  useEffect(() => {
+    loadSchedules();
+    const channel = supabase
+      .channel("generated-schedules-rt")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "Schedule" },
+        () => {
+          loadSchedules();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadSchedules]);
 
   const loadGrid = async (id) => {
     if (!id) {
-      setScheduleData({});
       setSlotList([]);
       return;
     }
@@ -193,178 +491,185 @@ export default function GeneratedSchedule() {
         start: slot.start ? slot.start.slice(0, 5) : "",
         end: slot.end ? slot.end.slice(0, 5) : "",
       }));
-
-      const tableData = {};
-      const baseSectionByCourse = {};
-
-      for (const slot of normalizedSlots) {
-        if (slot.is_external && slot.course_code) {
-          const sectionNum = Number(slot.section_number);
-          if (Number.isFinite(sectionNum)) {
-            const existing = baseSectionByCourse[slot.course_code];
-            baseSectionByCourse[slot.course_code] =
-              existing === undefined ? sectionNum : Math.min(existing, sectionNum);
-          }
-        }
-      }
-
-      for (const slot of normalizedSlots) {
-        const day = slot.day;
-        if (!tableData[day]) tableData[day] = {};
-        const start = slot.start;
-        const end = slot.end;
-        let label = `${start} - ${end}`;
-
-        let type = "lab";
-        let labelType = "Lab";
-        let subtitle = "Lab";
-        let span = 1;
-        if (slot.is_external) {
-          type = "core";
-          labelType = "Lecture";
-          subtitle = "Lecture";
-          const sectionNum = Number(slot.section_number);
-          const base = baseSectionByCourse[slot.course_code];
-          if (Number.isFinite(sectionNum) && Number.isFinite(base)) {
-            const diff = sectionNum - base;
-            if (diff === 1) {
-              type = "tutorial";
-              labelType = "Tutorial";
-              subtitle = "Tutorial";
-            } else if (diff >= 2) {
-              type = "lab";
-              labelType = "Lab";
-              subtitle = "Lab";
-            }
-          }
-        } else {
-          labelType = "Internal";
-          subtitle = "Internal";
-        }
-
-        const durationMinutes = Math.max(
-          timeToMinutes(slot.end) - timeToMinutes(slot.start),
-          0
-        );
-        const startIdx = START_TO_INDEX[start];
-        if (startIdx !== undefined) {
-          label = TIMES[startIdx];
-          const slotEnd = SLOT_PARTS[startIdx].end;
-          const nextEnd = SLOT_PARTS[startIdx + 1]?.end;
-          if (end === nextEnd) {
-            span = 2;
-          } else if (end === slotEnd) {
-            span = 1;
-          } else if (durationMinutes >= 100) {
-            span = 2;
-          }
-          if (span > 1) {
-            span = Math.min(span, TIMES.length - startIdx);
-          }
-        } else if (durationMinutes >= 100) {
-          span = 2;
-        }
-
-        if (!slot.is_external) {
-          const isLectureDay = INTERNAL_LECTURE_DAYS.has(day);
-          const isConnectedLecture = span > 1;
-          if (isLectureDay || isConnectedLecture) {
-            type = "core";
-            labelType = "Lecture";
-            subtitle = "Lecture";
-          } else {
-            type = "tutorial";
-            labelType = "Tutorial";
-            subtitle = "Tutorial";
-          }
-        }
-
-        const baseEntry = {
-          subject: slot.course_code + " " + (slot.course_name || ""),
-          room: slot.section_number ? `Sec ${slot.section_number}` : "",
-          type,
-          labelType,
-          subtitle,
-          span,
-        };
-
-        for (let offset = 0; offset < span; offset += 1) {
-          const targetIdx = (startIdx ?? -1) + offset;
-          const targetLabel = TIMES[targetIdx] ?? label;
-          if (!targetLabel) break;
-
-          const cellEntry = {
-            ...baseEntry,
-            spanPart: span > 1 ? offset + 1 : null,
-            spanTotal: span,
-          };
-
-          const cell = tableData[day][targetLabel];
-          if (!cell) {
-            tableData[day][targetLabel] = cellEntry;
-          } else if (Array.isArray(cell)) {
-            cell.push(cellEntry);
-          } else {
-            tableData[day][targetLabel] = [cell, cellEntry];
-          }
-        }
-      }
-      setScheduleData(tableData);
-      setSlotList(normalizedSlots);
+      const sharedGrid = getScheduleGridArray(id);
+      replaceArrayContents(sharedGrid, normalizedSlots);
     } catch (err) {
       console.error("Load grid failed:", err);
-      setScheduleData({});
+      const sharedGrid = getScheduleGridArray(id);
+      replaceArrayContents(sharedGrid, []);
       setSlotList([]);
     }
   };
 
   useEffect(() => {
-    if (scheduleId) loadGrid(scheduleId);
-    else {
-      setScheduleData({});
-      setSlotList([]);
+    if (!scheduleId) {
+      return;
     }
+    loadGrid(scheduleId);
   }, [scheduleId]);
 
   useEffect(() => {
-    if (!showEditor) return;
-    const nextDraft = {};
-    for (const slot of slotList) {
-      const slotId = slot?.slot_id;
-      if (slotId === undefined || slotId === null) continue;
-      nextDraft[slotId] = {
-        day: slot.day,
-        start: slot.start,
-        end: slot.end,
-      };
+    if (!scheduleId) {
+      setSlotList([]);
+      return undefined;
     }
-    setSlotEdits(nextDraft);
-  }, [showEditor, slotList]);
+    const sharedGrid = getScheduleGridArray(scheduleId);
+    const syncGrid = () => {
+      setSlotList(toPlainArray(sharedGrid));
+    };
+    syncGrid();
+    const observer = () => syncGrid();
+    sharedGrid.observe(observer);
+    return () => {
+      sharedGrid.unobserve(observer);
+    };
+  }, [scheduleId]);
+
+  useEffect(() => {
+    const draftMap = getScheduleDraftMap(scheduleId);
+    if (!draftMap) {
+      setSlotEditsState({});
+      return undefined;
+    }
+    const syncDrafts = () => {
+      setSlotEditsState(toPlainMap(draftMap));
+    };
+    syncDrafts();
+    const observer = () => syncDrafts();
+    draftMap.observe(observer);
+    return () => {
+      draftMap.unobserve(observer);
+    };
+  }, [scheduleId]);
+
+  useEffect(() => {
+    if (!scheduleId) return;
+    const draftMap = getScheduleDraftMap(scheduleId);
+    if (!draftMap) return;
+    const slotKeys = new Set();
+    slotList.forEach((slot) => {
+      const slotId = slot?.slot_id;
+      if (slotId === undefined || slotId === null) return;
+      const key = String(slotId);
+      slotKeys.add(key);
+      if (!draftMap.has(key)) {
+        draftMap.set(key, {
+          slotId,
+          scheduleId,
+          day: slot.day,
+          start: slot.start,
+          end: slot.end,
+        });
+      }
+    });
+    draftMap.forEach((_value, key) => {
+      if (!slotKeys.has(key)) {
+        draftMap.delete(key);
+      }
+    });
+  }, [scheduleId, slotList]);
+
+  useEffect(() => {
+    const presenceMap = getSchedulePresenceMap(scheduleId);
+    if (!presenceMap) {
+      setPresence({});
+      return undefined;
+    }
+    const syncPresence = () => {
+      setPresence(toPlainMap(presenceMap));
+    };
+    syncPresence();
+    const observer = () => syncPresence();
+    presenceMap.observe(observer);
+    return () => {
+      presenceMap.unobserve(observer);
+    };
+  }, [scheduleId]);
+
+  useEffect(() => {
+    if (!scheduleId || !showEditor) {
+      const map = getSchedulePresenceMap(scheduleId);
+      map?.delete?.(clientId);
+      return undefined;
+    }
+    const presenceMap = getSchedulePresenceMap(scheduleId);
+    if (!presenceMap) return undefined;
+    const announce = () => {
+      presenceMap.set(clientId, {
+        id: clientId,
+        name: actorName,
+        scheduleId,
+        lastSeen: new Date().toISOString(),
+      });
+    };
+    announce();
+    const heartbeat = setInterval(announce, 8000);
+    return () => {
+      clearInterval(heartbeat);
+      presenceMap.delete(clientId);
+    };
+  }, [showEditor, scheduleId, clientId, actorName]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return undefined;
+    const handleBeforeUnload = () => {
+      const map = getSchedulePresenceMap(scheduleIdRef.current);
+      map?.delete?.(clientId);
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [clientId]);
 
   const refreshSchedules = useCallback(async () => {
-    try {
-      const { data } = await http.get("/schedule/list", withAuth());
-      const rows = data ?? [];
-      setSchedules(rows);
-      if (rows.length === 0) {
-        updateActiveSchedule(null, false);
-      } else {
-        const current = scheduleIdRef.current;
-        const preferred = rows.some((s) => s.ScheduleID === current)
-          ? current
-          : Number(rows[0].ScheduleID);
-        updateActiveSchedule(preferred, false);
-      }
-    } catch (err) {
-      console.error("Refresh schedules failed:", err);
-    }
-  }, [updateActiveSchedule]);
+    await loadSchedules();
+  }, [loadSchedules]);
 
   const notifyScheduleChange = useCallback(() => {
     const current = scheduleIdRef.current;
     if (current === null || current === undefined) return;
     broadcastScheduleId(current);
   }, [broadcastScheduleId]);
+
+  const handleAddComment = useCallback(
+    (event) => {
+      event?.preventDefault?.();
+      const text = newComment.trim();
+      if (!text) return;
+      const actor =
+        actorName ||
+        (typeof window === "undefined"
+          ? "Committee member"
+          : window.localStorage.getItem("fullName") ||
+            window.localStorage.getItem("name") ||
+            window.localStorage.getItem("email") ||
+            "Committee member");
+      const comment = {
+        id:
+          globalThis.crypto?.randomUUID?.() ||
+          `${Date.now()}-${Math.round(Math.random() * 1e6)}`,
+        text,
+        author: actor,
+        scheduleId: scheduleIdRef.current,
+        createdAt: new Date().toISOString(),
+      };
+      scheduleCommentsShared.push([comment]);
+      setNewComment("");
+    },
+    [newComment, actorName]
+  );
+
+  const handleRemoveComment = useCallback((commentId) => {
+    const rawEntries = scheduleCommentsShared.toArray();
+    const targetIndex = rawEntries.findIndex((entry) => {
+      if (entry && typeof entry.get === "function") {
+        return entry.get("id") === commentId;
+      }
+      return entry?.id === commentId;
+    });
+    if (targetIndex >= 0) {
+      scheduleCommentsShared.delete(targetIndex, 1);
+    }
+  }, []);
 
   const openEditor = () => {
     if (!scheduleId) return;
@@ -379,16 +684,36 @@ export default function GeneratedSchedule() {
     setShowEditor(false);
     setEditorMsg(null);
     setEditorError(null);
-    setSlotEdits({});
     setAddForm({ ...ADD_FORM_TEMPLATE });
   };
 
-  const updateSlotDraft = (slotId, patch) => {
-    setSlotEdits((prev) => ({
-      ...prev,
-      [slotId]: { ...prev[slotId], ...patch },
-    }));
-  };
+  const updateSlotDraft = useCallback(
+    (slotId, patch) => {
+      if (!slotId) return;
+      const draftMap = getScheduleDraftMap(scheduleIdRef.current);
+      if (!draftMap) return;
+      const key = String(slotId);
+      const existing = draftMap.get(key);
+      const base = existing && typeof existing.toJSON === "function" ? existing.toJSON() : existing;
+      const fallbackSlot = slotList.find((slot) => slot.slot_id === slotId);
+      const nextDraft = {
+        slotId,
+        scheduleId: scheduleIdRef.current,
+        day: base?.day ?? fallbackSlot?.day ?? DAYS[0],
+        start: base?.start ?? fallbackSlot?.start ?? "",
+        end: base?.end ?? fallbackSlot?.end ?? "",
+        updatedBy: actorName,
+        updatedAt: new Date().toISOString(),
+        ...patch,
+      };
+      draftMap.set(key, nextDraft);
+      setSlotEditsState((prev) => ({
+        ...prev,
+        [slotId]: nextDraft,
+      }));
+    },
+    [actorName, slotList]
+  );
 
   const updateAddForm = (patch) => {
     setAddForm((prev) => ({ ...prev, ...patch }));
@@ -455,6 +780,16 @@ export default function GeneratedSchedule() {
         payload,
         withAuth()
       );
+      const draftMap = getScheduleDraftMap(scheduleIdRef.current);
+      if (draftMap && scheduleIdRef.current !== null && scheduleIdRef.current !== undefined) {
+        draftMap.set(String(slotId), {
+          slotId,
+          scheduleId: scheduleIdRef.current,
+          ...payload,
+          updatedBy: actorName,
+          updatedAt: new Date().toISOString(),
+        });
+      }
       if (scheduleIdRef.current !== null && scheduleIdRef.current !== undefined) {
         await loadGrid(scheduleIdRef.current);
       }
@@ -477,6 +812,8 @@ export default function GeneratedSchedule() {
     setRemovingSlotId(slotId);
     try {
       await http.delete(`/schedule/slots/${slotId}`, withAuth());
+      const draftMap = getScheduleDraftMap(scheduleIdRef.current);
+      draftMap?.delete?.(String(slotId));
       if (scheduleIdRef.current !== null && scheduleIdRef.current !== undefined) {
         await loadGrid(scheduleIdRef.current);
       }
@@ -767,6 +1104,21 @@ export default function GeneratedSchedule() {
       `}</style>
 
       <h2 className="text-center mb-2">Schedule</h2>
+      {collaboratorBadges.length > 0 && (
+        <Alert
+          variant="info"
+          className="d-flex flex-wrap gap-2 justify-content-center align-items-center mb-3"
+        >
+          <span className="fw-semibold mb-0">Live editors:</span>
+          <div className="d-flex flex-wrap gap-2 mb-0">
+            {collaboratorBadges.map((entry) => (
+              <span key={entry.id} className="badge bg-primary text-light">
+                {entry.label}
+              </span>
+            ))}
+          </div>
+        </Alert>
+      )}
       {loadingList && (
         <div className="text-center text-muted mb-2">
           <Spinner animation="border" size="sm" className="me-2" /> Loading schedules...
@@ -894,6 +1246,65 @@ export default function GeneratedSchedule() {
         <div className="legend-box"><div className="legend-color" style={{ backgroundColor: PALETTE.lab }}></div> Lab</div>
       </div>
 
+      <div className="mt-4 bg-white rounded-4 shadow-sm p-3">
+        <div className="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+          <div>
+            <h5 className="mb-0">Shared Committee Notes</h5>
+            <small className="text-muted">
+              {sharedMeta.updatedAt
+                ? `Last synced by ${sharedMeta.updatedBy || "—"} at ${formatTimestamp(sharedMeta.updatedAt)}`
+                : "Realtime collaboration is active"}
+            </small>
+          </div>
+          <small className="text-muted">Active schedule: {scheduleId ?? "—"}</small>
+        </div>
+        <Form className="d-flex gap-2 mb-3" onSubmit={handleAddComment}>
+          <Form.Control
+            placeholder="Share a note or decision with the committee"
+            value={newComment}
+            onChange={(e) => setNewComment(e.target.value)}
+          />
+          <Button type="submit" disabled={!newComment.trim()}>
+            Post
+          </Button>
+        </Form>
+        <div className="list-group">
+          {comments.length === 0 ? (
+            <div className="list-group-item text-muted">No comments yet. Start the discussion.</div>
+          ) : (
+            [...comments]
+              .sort((a, b) => {
+                const aTime = a?.createdAt ? new Date(a.createdAt).getTime() : 0;
+                const bTime = b?.createdAt ? new Date(b.createdAt).getTime() : 0;
+                return bTime - aTime;
+              })
+              .map((comment) => (
+                <div
+                  key={comment.id}
+                  className="list-group-item d-flex justify-content-between align-items-start gap-3"
+                >
+                  <div>
+                    <div className="fw-semibold">{comment.author || "Member"}</div>
+                    <div>{comment.text}</div>
+                    <small className="text-muted">
+                      {comment.scheduleId ? `Schedule #${comment.scheduleId}` : "All schedules"}
+                      {comment.createdAt ? ` • ${formatTimestamp(comment.createdAt)}` : ""}
+                    </small>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="link"
+                    className="text-danger p-0"
+                    onClick={() => handleRemoveComment(comment.id)}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              ))
+          )}
+        </div>
+      </div>
+
       <Modal show={showEditor} onHide={closeEditor} size="xl" centered>
         <Modal.Header closeButton>
           <Modal.Title>Edit Schedule</Modal.Title>
@@ -901,6 +1312,16 @@ export default function GeneratedSchedule() {
         <Modal.Body>
           {editorError && <Alert variant="danger">{editorError}</Alert>}
           {editorMsg && <Alert variant="success">{editorMsg}</Alert>}
+          {collaboratorBadges.length > 0 && (
+            <div className="d-flex align-items-center flex-wrap gap-2 mb-3">
+              <small className="text-muted">Live in this editor:</small>
+              {collaboratorBadges.map((entry) => (
+                <span key={`modal-${entry.id}`} className="badge bg-primary text-light">
+                  {entry.label}
+                </span>
+              ))}
+            </div>
+          )}
 
           <h5 className="mt-2">Scheduled Slots</h5>
           {slotList.length === 0 ? (
@@ -932,9 +1353,17 @@ export default function GeneratedSchedule() {
                     const saving = savingSlotId === slotId;
                     const removing = removingSlotId === slotId;
                     const key = slotId ?? `slot-${index}`;
+                    const updatedAtTs = draft?.updatedAt
+                      ? new Date(draft.updatedAt).getTime()
+                      : null;
+                    const recentlyEdited = updatedAtTs ? Date.now() - updatedAtTs < ACTIVE_PRESENCE_WINDOW : false;
+                    const editedByOther = Boolean(
+                      draft?.updatedBy && draft.updatedBy !== actorName && recentlyEdited
+                    );
+                    const rowClassName = editedByOther ? "table-warning" : undefined;
 
                     return (
-                      <tr key={key}>
+                      <tr key={key} className={rowClassName}>
                         <td>
                           <div className="fw-semibold">{slot.course_code}</div>
                           {slot.course_name && (
@@ -1001,6 +1430,11 @@ export default function GeneratedSchedule() {
                           >
                             {removing ? "Removing..." : "Remove"}
                           </Button>
+                          {editedByOther && (
+                            <small className="text-muted d-block mt-1">
+                              Editing now: {draft.updatedBy}
+                            </small>
+                          )}
                         </td>
                       </tr>
                     );

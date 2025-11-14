@@ -1,44 +1,50 @@
-# configure the connection between 2 continers
 version: "3.9"
 
 services:
- 
-  # Server container
- 
+  # Realtime collaboration backend
+  realtime:
+    build:
+      context: ./realtime-server
+      dockerfile: Dockerfile
+    container_name: realtime
+    ports:
+      - "3001:3001"
+    environment:
+      PORT: 3001
+    restart: unless-stopped
+
+  # Main API / server backend
   server:
     build:
       context: ./server
-      dockerfile: Dockerfile  # server Dockerfile
+      dockerfile: Dockerfile
     container_name: server
     ports:
-      - "5000:5000"           # expose server port to host
+      - "5000:5000"
     env_file:
-      - ./.env                # root-level .env file 
+      - ./.env
     environment:
-      NODE_ENV: production    
-    # Optional: restart always
+      NODE_ENV: production
+      # Example if server ever needs realtime:
+      REACT_APP_WS_URL: ws://realtime:3001/yjs
+    depends_on:
+      - realtime
+    command: ["node", "./src/index.js"]   # ✅ ensure it runs your actual entry file
     restart: unless-stopped
 
-  
-  # Client container
- 
+  # Frontend client
   client:
     build:
       context: ./client
-      dockerfile: Dockerfile  
+      dockerfile: Dockerfile
     container_name: client
     ports:
-      - "3000:80"             # expose Nginx serving React
-    # Using server container as API backend in Docker network
+      - "3000:80"  # Nginx serves the built React app
     environment:
-      
-      
-      VITE_API_URL: http://localhost:5000
+      # Notice we use service names, not localhost
+      VITE_API_URL: http://server:5000
+      REACT_APP_WS_URL: ws://realtime:3001/yjs
     depends_on:
       - server
-    
+      - realtime
     restart: unless-stopped
-
-# ---------------------------
-# Notes:
-# This setup mirrors Vercel deployment structure locally

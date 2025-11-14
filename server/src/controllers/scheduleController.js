@@ -31,12 +31,13 @@ export function resolveUserId(req) {
 
 async function nextGroupNo(client, scId, level) {
   if (level === null || level === undefined) return 1;
+  const scopedId = scopeCommitteeFilter(scId) ?? null;
   const r = await client.query(
     `SELECT COALESCE(MAX("GroupNo"), 0) + 1 AS "next"
        FROM "Schedule"
-      WHERE "SchedulingCommitteeID"=$1
-        AND "Level"=$2`,
-    [scId, level]
+      WHERE ($1::int IS NULL OR "SchedulingCommitteeID"=$1)
+        AND ($2::int IS NULL OR "Level"=$2)`,
+    [scopedId, level]
   );
   return r.rows[0]?.next ?? 1;
 }
@@ -60,6 +61,12 @@ const GROUP_B_COURSES = new Set([
 ]);
 
 const IRREGULAR_LEVELS = new Set([4, 6, 8]);
+
+const SHARE_SCHEDULES_GLOBAL =
+  (process.env.SHARE_SCHEDULES_GLOBALLY ?? "true").toLowerCase() !== "false";
+export const isGlobalScheduleSharingEnabled = SHARE_SCHEDULES_GLOBAL;
+export const scopeCommitteeFilter = (committeeId) =>
+  SHARE_SCHEDULES_GLOBAL ? null : committeeId;
 
 const DEFAULT_LECTURE_START = "08:00";
 const DEFAULT_TUTORIAL_START = "10:00";
@@ -358,7 +365,12 @@ export async function getSchedulingCommitteeId(userId) {
       WHERE "SchedulingCommitteeID"=$1`,
     [userId]
   );
-  if (!r.rowCount) throw new Error("No SchedulingCommittee found for this user");
+  if (!r.rowCount) {
+    if (SHARE_SCHEDULES_GLOBAL) {
+      return null;
+    }
+    throw new Error("No SchedulingCommittee found for this user");
+  }
   return r.rows[0].SchedulingCommitteeID;
 }
 
@@ -560,6 +572,7 @@ export const initSchedule = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
     const forceNew =
       req.query?.forceNew === "true" ||
       req.body?.forceNew === true ||
@@ -569,11 +582,11 @@ export const initSchedule = async (req, res) => {
       const existing = await pool.query(
         `SELECT "ScheduleID"
            FROM "Schedule"
-          WHERE "SchedulingCommitteeID"=$1
+          WHERE ($1::int IS NULL OR "SchedulingCommitteeID"=$1)
             AND "Status"<>'finalized'
           ORDER BY "ScheduleID" DESC
           LIMIT 1`,
-        [scId]
+        [scFilter]
       );
       if (existing.rowCount) {
         return res.json({ scheduleId: existing.rows[0].ScheduleID });
@@ -634,14 +647,15 @@ export const addExternalSlot = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
 
     const scheduleRow = scheduleId
       ? await client.query(
           `SELECT "Level","Status"
              FROM "Schedule"
-            WHERE "ScheduleID"=$1 AND "SchedulingCommitteeID"=$2
+            WHERE "ScheduleID"=$1 AND ($2::int IS NULL OR "SchedulingCommitteeID"=$2)
             FOR UPDATE`,
-          [scheduleId, scId]
+          [scheduleId, scFilter]
         )
       : { rowCount: 0, rows: [] };
 
@@ -732,12 +746,12 @@ export const addExternalSlot = async (req, res) => {
         const existingForLevel = await client.query(
           `SELECT "ScheduleID","GroupNo"
              FROM "Schedule"
-            WHERE "SchedulingCommitteeID"=$1
+            WHERE ($1::int IS NULL OR "SchedulingCommitteeID"=$1)
               AND "Level"=$2
               AND "Status"='draft'
             ORDER BY "ScheduleID" DESC
             LIMIT 1`,
-          [scId, level]
+          [scFilter, level]
         );
 
         if (existingForLevel.rowCount) {
@@ -1275,12 +1289,13 @@ export const approveSchedule = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
 
     const current = await pool.query(
       `SELECT "Status","Level","GroupNo"
          FROM "Schedule"
-        WHERE "ScheduleID"=$1 AND "SchedulingCommitteeID"=$2`,
-      [scheduleId, scId]
+        WHERE "ScheduleID"=$1 AND ($2::int IS NULL OR "SchedulingCommitteeID"=$2)`,
+      [scheduleId, scFilter]
     );
 
     if (!current.rowCount) {
@@ -1388,15 +1403,16 @@ export const createManualSlot = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
 
     await client.query("BEGIN");
 
     const scheduleRow = await client.query(
       `SELECT "ScheduleID","Status","Level"
          FROM "Schedule"
-        WHERE "ScheduleID"=$1 AND "SchedulingCommitteeID"=$2
+        WHERE "ScheduleID"=$1 AND ($2::int IS NULL OR "SchedulingCommitteeID"=$2)
         FOR UPDATE`,
-      [scheduleIdNumeric, scId]
+      [scheduleIdNumeric, scFilter]
     );
 
     if (!ensureScheduleOwnershipRow(scheduleRow, res)) {
@@ -1553,6 +1569,7 @@ export const updateScheduleSlot = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
 
     await client.query("BEGIN");
 
@@ -1560,9 +1577,9 @@ export const updateScheduleSlot = async (req, res) => {
       `SELECT s."ScheduleID", sch."Status"
          FROM "ScheduleSlot" s
          JOIN "Schedule" sch ON sch."ScheduleID"=s."ScheduleID"
-        WHERE s."SlotID"=$1 AND sch."SchedulingCommitteeID"=$2
+        WHERE s."SlotID"=$1 AND ($2::int IS NULL OR sch."SchedulingCommitteeID"=$2)
         FOR UPDATE`,
-      [slotId, scId]
+      [slotId, scFilter]
     );
 
     if (!ensureScheduleOwnershipRow(slotRow, res)) {
@@ -1620,6 +1637,7 @@ export const removeScheduleSlot = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
 
     await client.query("BEGIN");
 
@@ -1627,9 +1645,9 @@ export const removeScheduleSlot = async (req, res) => {
       `SELECT s."ScheduleID", sch."Status"
          FROM "ScheduleSlot" s
          JOIN "Schedule" sch ON sch."ScheduleID"=s."ScheduleID"
-        WHERE s."SlotID"=$1 AND sch."SchedulingCommitteeID"=$2
+        WHERE s."SlotID"=$1 AND ($2::int IS NULL OR sch."SchedulingCommitteeID"=$2)
         FOR UPDATE`,
-      [slotId, scId]
+      [slotId, scFilter]
     );
 
     if (!ensureScheduleOwnershipRow(slotRow, res)) {
@@ -1682,13 +1700,14 @@ export const listSchedules = async (req, res) => {
     }
 
     const scId = await getSchedulingCommitteeId(userId);
+    const scFilter = scopeCommitteeFilter(scId);
     const r = await pool.query(
       `SELECT "ScheduleID","Level","Status","GroupNo"
          FROM "Schedule"
-        WHERE "SchedulingCommitteeID"=$1
+        WHERE ($1::int IS NULL OR "SchedulingCommitteeID"=$1)
           AND "Status"<>'archived'
         ORDER BY COALESCE("Level", 0), COALESCE("GroupNo", 0), "ScheduleID"`,
-      [scId]
+      [scFilter]
     );
     const annotated = r.rows.map((row) => {
       const levelNumber = Number(row.Level);

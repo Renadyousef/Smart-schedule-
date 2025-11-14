@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import axios from "axios";
+import { useCallback, useEffect, useState } from "react";
 import API from "../../API_continer";
+import supabase from "../../supabaseClient";
 
 export default function ManageRules() {
   const [rules, setRules] = useState([]);
@@ -15,18 +15,31 @@ export default function ManageRules() {
   const [errors, setErrors] = useState({});
   const [message, setMessage] = useState("");
 
-  // Fetch rules on mount
-  useEffect(() => {
-    const fetchRules = async () => {
-      try {
-        const response = await API.get("/rules/display");
-        setRules(response.data);
-      } catch (error) {
-        console.error("Error fetching rules:", error);
-      }
-    };
-    fetchRules();
+  const loadRules = useCallback(async () => {
+    try {
+      const response = await API.get("/rules/display");
+      setRules(response.data);
+    } catch (error) {
+      console.error("Error fetching rules:", error);
+    }
   }, []);
+
+  // Fetch rules on mount + subscribe to realtime updates
+  useEffect(() => {
+    loadRules();
+    const channel = supabase
+      .channel("rules-rt")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "rules" },
+        () => loadRules()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadRules]);
 
   // Validation (same as yours)...
   const validate = () => {

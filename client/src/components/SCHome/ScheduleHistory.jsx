@@ -11,10 +11,53 @@ import {
   Alert,
 } from "react-bootstrap";
 import API from "../../API_continer";
+import supabase from "../../supabaseClient";
+import {
+  getHistoryListArray,
+  getHistorySnapshotsMap,
+  ySchedule,
+} from "../../collab/yjsClient";
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday"];
 const API_BASE = import.meta.env.VITE_API_BASE || "http://localhost:5000";
 const http = API || axios.create({ baseURL: API_BASE });
+
+const historyListShared = getHistoryListArray();
+const historySnapshotsShared = getHistorySnapshotsMap();
+
+const toPlain = (value) => {
+  if (!value) return value;
+  return typeof value.toJSON === "function" ? value.toJSON() : value;
+};
+
+const arrayToPlain = (yArray) =>
+  yArray
+    .toArray()
+    .map((entry) => toPlain(entry));
+
+const replaceArrayContents = (yArray, values = []) => {
+  if (!yArray) return;
+  const length = yArray.length || 0;
+  if (length) {
+    yArray.delete(0, length);
+  }
+  if (Array.isArray(values) && values.length) {
+    yArray.push(values);
+  }
+};
+
+const getHistoryListSnapshot = () => arrayToPlain(historyListShared);
+
+const getHistoryMetaSnapshot = () => {
+  const metaValue = ySchedule.get("historyMeta");
+  return toPlain(metaValue) || {};
+};
+
+const getHistoryDetailSnapshot = (historyId) => {
+  if (!historyId) return null;
+  const value = historySnapshotsShared.get(String(historyId));
+  return toPlain(value) || null;
+};
 
 const LEGEND_ITEMS = [
   { key: "core", label: "Core / External" },
@@ -266,14 +309,26 @@ function statusVisual(status) {
 }
 
 export default function ScheduleHistory() {
-  const [filters, setFilters] = useState({ level: "", groupNo: "" });
-  const [historyItems, setHistoryItems] = useState([]);
-  const [meta, setMeta] = useState({});
+  const initialFilters = (() => {
+    const stored = toPlain(ySchedule.get("historyFilters"));
+    if (stored && typeof stored === "object") {
+      return {
+        level: stored.level ?? "",
+        groupNo: stored.groupNo ?? "",
+      };
+    }
+    return { level: "", groupNo: "" };
+  })();
+
+  const [filters, setFilters] = useState(initialFilters);
+  const [historyItems, setHistoryItems] = useState(() => getHistoryListSnapshot());
+  const [meta, setMeta] = useState(() => getHistoryMetaSnapshot());
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [selectedId, setSelectedId] = useState(null);
-  const selectedIdRef = useRef(null);
-  const [detail, setDetail] = useState(null);
+  const initialSelected = ySchedule.get("historySelectedId") || null;
+  const [selectedId, setSelectedId] = useState(initialSelected);
+  const selectedIdRef = useRef(initialSelected);
+  const [detail, setDetail] = useState(() => getHistoryDetailSnapshot(initialSelected));
   const [detailLoading, setDetailLoading] = useState(false);
 
   const fetchHistory = useCallback(async () => {
@@ -290,8 +345,11 @@ export default function ScheduleHistory() {
         withAuth({ params })
       );
       const items = Array.isArray(data?.items) ? data.items : [];
+      const metaPayload = data?.meta ?? {};
       setHistoryItems(items);
-      setMeta(data?.meta ?? {});
+      setMeta(metaPayload);
+      replaceArrayContents(historyListShared, items);
+      ySchedule.set("historyMeta", metaPayload);
 
       if (items.length) {
         const currentSelected = selectedIdRef.current;
@@ -302,16 +360,23 @@ export default function ScheduleHistory() {
           selectedIdRef.current = ensureId;
           setSelectedId(ensureId);
         }
+        const sharedSelected = ySchedule.get("historySelectedId") || null;
+        if (sharedSelected !== ensureId) {
+          ySchedule.set("historySelectedId", ensureId);
+        }
       } else {
         selectedIdRef.current = null;
         setSelectedId(null);
         setDetail(null);
+        ySchedule.set("historySelectedId", null);
       }
     } catch (err) {
       console.error("fetchHistory:", err);
       setError(err?.response?.data?.msg || "Failed to load history");
       setHistoryItems([]);
       setMeta({});
+      replaceArrayContents(historyListShared, []);
+      ySchedule.set("historyMeta", {});
     } finally {
       setLoading(false);
     }
@@ -322,17 +387,111 @@ export default function ScheduleHistory() {
   }, [fetchHistory]);
 
   useEffect(() => {
-    if (!selectedId) return;
+    const handleListChange = () => {
+      setHistoryItems(getHistoryListSnapshot());
+    };
+    historyListShared.observe(handleListChange);
+    return () => {
+      historyListShared.unobserve(handleListChange);
+    };
+  }, []);
 
-    let isCurrent = true;
+  useEffect(() => {
+    const handleSnapshotsChange = (event) => {
+      if (!selectedIdRef.current) return;
+      const key = String(selectedIdRef.current);
+      if (event.keysChanged?.has?.(key)) {
+        const snapshot = getHistoryDetailSnapshot(selectedIdRef.current);
+        if (snapshot) {
+          setDetail(snapshot);
+          setDetailLoading(false);
+        }
+      }
+    };
+    historySnapshotsShared.observe(handleSnapshotsChange);
+    return () => {
+      historySnapshotsShared.unobserve(handleSnapshotsChange);
+    };
+  }, []);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("schedule-history-rt")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "schedule_history" },
+        () => {
+          fetchHistory();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [fetchHistory]);
+
+  useEffect(() => {
+    const observer = (event) => {
+      if (event.keysChanged.has("historyMeta")) {
+        setMeta(getHistoryMetaSnapshot());
+      }
+      if (event.keysChanged.has("historySelectedId")) {
+        const sharedSelected = ySchedule.get("historySelectedId") || null;
+        selectedIdRef.current = sharedSelected;
+        setSelectedId(sharedSelected);
+      }
+      if (event.keysChanged.has("historyFilters")) {
+        const sharedFilters = toPlain(ySchedule.get("historyFilters")) || { level: "", groupNo: "" };
+        setFilters({
+          level: sharedFilters.level ?? "",
+          groupNo: sharedFilters.groupNo ?? "",
+        });
+      }
+    };
+
+    ySchedule.observe(observer);
+    return () => {
+      ySchedule.unobserve(observer);
+    };
+  }, []);
+
+  useEffect(() => {
+    const sharedFilters = toPlain(ySchedule.get("historyFilters")) || { level: "", groupNo: "" };
+    if (
+      (sharedFilters.level ?? "") !== filters.level ||
+      (sharedFilters.groupNo ?? "") !== filters.groupNo
+    ) {
+      ySchedule.set("historyFilters", filters);
+    }
+  }, [filters]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setDetail(null);
+      return;
+    }
+
+    selectedIdRef.current = selectedId;
     setDetailLoading(true);
     setError(null);
+
+    const cached = getHistoryDetailSnapshot(selectedId);
+    if (cached) {
+      setDetail(cached);
+      setDetailLoading(false);
+      return;
+    }
+
+    let isCurrent = true;
 
     http
       .get(`/history/${selectedId}`, withAuth())
       .then((response) => {
         if (!isCurrent) return;
-        setDetail(response.data ?? null);
+        const payload = response.data ?? null;
+        setDetail(payload);
+        historySnapshotsShared.set(String(selectedId), payload);
       })
       .catch((err) => {
         if (!isCurrent) return;
@@ -380,6 +539,10 @@ export default function ScheduleHistory() {
   const handleSelect = (historyId) => {
     selectedIdRef.current = historyId;
     setSelectedId(historyId);
+    const sharedSelected = ySchedule.get("historySelectedId") || null;
+    if (sharedSelected !== historyId) {
+      ySchedule.set("historySelectedId", historyId);
+    }
   };
 
   const detailSnapshot = detail?.history?.snapshot ?? null;
