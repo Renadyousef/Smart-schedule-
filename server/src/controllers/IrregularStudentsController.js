@@ -70,29 +70,26 @@ export const searchStudentsByName = async (req, res) => {
       if (!Number.isFinite(depId)) depId = 4;
     }
 
-    const pattern = `%${name}%`;
+// 🔹 استعلام البحث المحسن باستخدام Full Text Search مع prefix matching
+const q = await client.query(
+  `
+  select
+    s."StudentID" as "studentId",
+    coalesce(u."Full_name",
+             trim(coalesce(u."First_name",'') || ' ' || coalesce(u."Last_name",''))) as "fullName",
+    u."DepartmentID" as "departmentId",
+    case when u."DepartmentID" is distinct from $4 then true else false end as "isDisabled",
+    ts_rank(u.search_vector, to_tsquery('simple', $1 || ':*')) as rank
+  from public."Students" s
+  join ${usersTable} u on u."UserID" = s."StudentID"
+  where u."Role" = 'student'
+    and u.search_vector @@ to_tsquery('simple', $1 || ':*')
+  order by rank desc, "fullName" asc
+  limit $2 offset $3
+  `,
+  [name, limit, offset, depId]
+);
 
-    const q = await client.query(
-      `
-      select
-        s."StudentID" as "studentId",
-        coalesce(u."Full_name",
-                 trim(coalesce(u."First_name",'') || ' ' || coalesce(u."Last_name",''))) as "fullName",
-        u."DepartmentID" as "departmentId",
-        case when u."DepartmentID" is distinct from $4 then true else false end as "isDisabled"
-      from public."Students" s
-      join ${usersTable} u on u."UserID" = s."StudentID"
-      where u."Role" = 'student'
-        and (
-          u."Full_name"  ilike $1 or
-          u."First_name" ilike $1 or
-          u."Last_name"  ilike $1
-        )
-      order by "fullName" asc
-      limit $2 offset $3
-      `,
-      [pattern, limit, offset, depId]
-    );
 
     return res.json({
       ok: true,
