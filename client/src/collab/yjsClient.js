@@ -82,13 +82,30 @@ const readQueryParam = (key) => {
   return value && value.trim().length ? value.trim() : null
 }
 
+const getEnvValue = (...keys) => {
+  const importEnv = typeof import.meta !== 'undefined' ? import.meta.env ?? {} : {}
+  for (const key of keys) {
+    const candidate = importEnv[key]
+    if (candidate && String(candidate).trim().length) {
+      return String(candidate).trim()
+    }
+  }
+  const nodeEnv = typeof process !== 'undefined' ? process.env ?? {} : {}
+  for (const key of keys) {
+    const candidate = nodeEnv[key]
+    if (candidate && String(candidate).trim().length) {
+      return String(candidate).trim()
+    }
+  }
+  return null
+}
+
 const resolveWsEndpoint = () => {
   const fromQuery = readQueryParam('ws')
   if (fromQuery) {
     return fromQuery
   }
-  const env = typeof process !== 'undefined' ? process.env ?? {} : {}
-  const fromEnv = env.VITE_WS_URL || env.REACT_APP_WS_URL || null
+  const fromEnv = getEnvValue('VITE_WS_URL', 'REACT_APP_WS_URL')
   if (fromEnv) {
     return fromEnv
   }
@@ -100,8 +117,7 @@ const detectRoom = () => {
   if (fromQuery) {
     return fromQuery
   }
-  const env = typeof process !== 'undefined' ? process.env ?? {} : {}
-  const envRoom = env.VITE_WS_ROOM || env.REACT_APP_WS_ROOM || null
+  const envRoom = getEnvValue('VITE_WS_ROOM', 'REACT_APP_WS_ROOM')
   if (envRoom) {
     return envRoom
   }

@@ -14,8 +14,11 @@ RUN npm install
 # 5.Copy all React code
 COPY . .
 
-#connecting to backend locally: for cont devolpment later
-ENV VITE_API_URL=http://localhost:5000
+# Allow overriding API/WS endpoints at build time
+ARG VITE_API_URL=http://localhost:5000
+ARG VITE_WS_URL=ws://localhost:3001/yjs
+ENV VITE_API_URL=${VITE_API_URL}
+ENV VITE_WS_URL=${VITE_WS_URL}
 
 # 6. Build the app THE RUN COMMAND:Runs the build script from package.json
 RUN npm run build

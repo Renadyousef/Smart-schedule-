@@ -1,8 +1,9 @@
 version: "3.9"
 
 services:
-  # Realtime collaboration backend
+  # Realtime collaboration backend (only started with --profile collab)
   realtime:
+    profiles: ["collab"]
     build:
       context: ./realtime-server
       dockerfile: Dockerfile
@@ -25,10 +26,6 @@ services:
       - ./.env
     environment:
       NODE_ENV: production
-      # Example if server ever needs realtime:
-      REACT_APP_WS_URL: ws://realtime:3001/yjs
-    depends_on:
-      - realtime
     command: ["node", "./src/index.js"]   # ✅ ensure it runs your actual entry file
     restart: unless-stopped
 
@@ -37,14 +34,12 @@ services:
     build:
       context: ./client
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: http://localhost:5000
+        VITE_WS_URL: wss://real-time-schedulers-service.onrender.com/yjs
     container_name: client
     ports:
       - "3000:80"  # Nginx serves the built React app
-    environment:
-      # Notice we use service names, not localhost
-      VITE_API_URL: http://server:5000
-      REACT_APP_WS_URL: ws://realtime:3001/yjs
     depends_on:
       - server
-      - realtime
     restart: unless-stopped
