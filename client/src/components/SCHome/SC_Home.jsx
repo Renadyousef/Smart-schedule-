@@ -9,11 +9,15 @@ import GeneratedSchedule from "./GeneratedSchedule.jsx";
 import ShareSchedule from "./ShareSchedule.jsx";
 import CreateRequest from "./CreateRequest.jsx";
 import ManageElectives from "../ElectivesSc.jsx";
-import Footer from "../Footer/Footer.jsx"; 
+import Footer from "../Footer/Footer.jsx";
 import Dashboard from "../Pages/Dashboard.jsx";
 import ScheduleHistory from "./ScheduleHistory.jsx";
-// ✅ استيراد صفحة الهوم (Landing)
+
+// ✅ صفحة الهوم
 import SCHomeLanding from "../SCHome/SCHomeLanding.jsx";
+
+// ✅ صفحة irregular students
+import IrregularStudent from "../IrregularStudent/IrregularStudent.jsx";
 
 export default function SC_Home({ onLogout }) {
   return (
@@ -24,7 +28,7 @@ export default function SC_Home({ onLogout }) {
         {/* الرئيسية */}
         <Route path="/" element={<SCHomeLanding />} />
 
-        {/* باقي المسارات */}
+        {/* باقي الصفحات */}
         <Route path="/external-courses" element={<ExternalCourses />} />
         <Route path="/internal-courses" element={<InternalCourses />} />
         <Route path="/generated-schedule" element={<GeneratedSchedule />} />
@@ -34,10 +38,13 @@ export default function SC_Home({ onLogout }) {
         <Route path="/manage" element={<ManageRules />} />
         <Route path="/account" element={<SCCommitteeProfile />} />
         <Route path="/Electives/handel" element={<ManageElectives />} />
-         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+
+        {/* ⭐ إضافة صفحة Irregular Students */}
+        <Route path="/irregular-student" element={<IrregularStudent />} />
       </Routes>
 
-      <Footer /> 
+      <Footer />
     </Router>
   );
 }

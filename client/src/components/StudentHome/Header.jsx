@@ -23,6 +23,15 @@ export default function Header({
   const [avatarErr, setAvatarErr] = React.useState(false);
   const initials = useInitials(userName, email, "ST");
 
+  // ✅ دالة اللوق آوت الوحيدة المطلوبة
+  const handleLogout = () => {
+    try {
+      sessionStorage.removeItem("lvl_pop_shown_session_v1");
+      sessionStorage.removeItem("lvl_pop_last_login_fp_v1");
+    } catch {}
+    onLogout(); // المنطق القديم للّوج آوت
+  };
+
   const Brand = inRouter ? NavLink : (p) => <a {...p} href="/" />;
   const LinkEl = inRouter
     ? ({ to, children }) => (
@@ -58,10 +67,8 @@ export default function Header({
         <div className="collapse navbar-collapse" id="navbarNavStudent">
           <div className="navbar-nav me-auto">
             <LinkEl to="/">Home</LinkEl>
-         <LinkEl to="/schedule">Schedule</LinkEl>
-
-
-           <LinkEl to="/electives">Electives</LinkEl>
+            <LinkEl to="/schedule">Schedule</LinkEl>
+            <LinkEl to="/electives">Electives</LinkEl>
           </div>
 
           <div className="dropdown">
@@ -92,11 +99,28 @@ export default function Header({
             </button>
 
             <ul className="dropdown-menu dropdown-menu-end" aria-labelledby="userMenuStudent">
-              <li>{inRouter ? <Link className="dropdown-item" to="/account">View Profile</Link> : <a className="dropdown-item" href="/account">View Profile</a>}</li>
+              <li>
+                {inRouter ? (
+                  <Link className="dropdown-item" to="/account">
+                    View Profile
+                  </Link>
+                ) : (
+                  <a className="dropdown-item" href="/account">
+                    View Profile
+                  </a>
+                )}
+              </li>
               <li><hr className="dropdown-divider" /></li>
-              <li><button className="dropdown-item text-danger" onClick={onLogout}>Log out</button></li>
+
+              {/* ✅ التعديل الوحيد هنا: handleLogout */}
+              <li>
+                <button className="dropdown-item text-danger" onClick={handleLogout}>
+                  Log out
+                </button>
+              </li>
             </ul>
           </div>
+
         </div>
       </div>
     </nav>

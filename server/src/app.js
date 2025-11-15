@@ -26,6 +26,7 @@ import historyRoutes from "./routes/HistoryRoutes.js";
 import stNotificationsRouter from "./routes/stNotifications.routes.js";
 import notifactionRouterSC from "./routes/notifactionRouterSC.js";
 import dashboardRoutes from "./routes/dashboardRoutes.js";
+import irregularStudentRouter from "./routes/irregular.student.routes.js";
 const app = express();
 
 // If you serve frontend from Vite on 5173:
@@ -85,5 +86,5 @@ app.use("/Notifications", notificationsRouter);
 app.use("/api/notifications", notificationsRoutes);
 app.use("/NotificationsSC", notifactionRouterSC);
 app.use("/api/dashboard", dashboardRoutes);
-
+app.use("/api/irregular-student", irregularStudentRouter);
 export default app;

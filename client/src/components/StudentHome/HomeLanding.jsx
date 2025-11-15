@@ -360,16 +360,48 @@ export default function HomeLanding() {
   const [studentName, setStudentName] = React.useState("Student");
   const [showPopup, setShowPopup] = React.useState(false);
 
+  // مفاتيح خاصة بالبوب-أب (تعديل منطق البوب-أب فقط)
+  const POP_KEY = "lvl_pop_shown_session_v1";
+  const LAST_LOGIN_FP_KEY = "lvl_pop_last_login_fp_v1";
+
+  // بصمة بسيطة لجلستك: التوكن + userId/email (بدون لمس أي مكان آخر)
+  function getLoginFingerprint() {
+    const token = localStorage.getItem("token") || localStorage.getItem("authToken") || "";
+    let user = null;
+    try { user = JSON.parse(localStorage.getItem("user") || "{}"); } catch {}
+    if (!user || Object.keys(user || {}).length === 0) {
+      try { user = JSON.parse(localStorage.getItem("profile") || "{}"); } catch {}
+    }
+    const uid = user?.id || user?._id || user?.UserID || user?.email || "";
+    return token ? `${token.slice(0, 12)}::${uid}` : "";
+  }
+
   const recompute = React.useCallback(() => {
     const { name, level } = pickUserAndLevelFromStorage();
     setStudentName(name);
-    setShowPopup(!(level !== null && level >= 1 && level <= 8));
+
+    const hasValidLevel = level !== null && level >= 1 && level <= 8;
+    const alreadyShown = sessionStorage.getItem(POP_KEY) === "1";
+
+    // قرار الإظهار النهائي
+    setShowPopup(!hasValidLevel && !alreadyShown);
   }, []);
 
   React.useEffect(() => {
+    // إذا تغيّر تسجيل الدخول (خروج/دخول) نمسح علامة البوب-أب لهذه الجلسة
+    try {
+      const curr = getLoginFingerprint();
+      const prev = sessionStorage.getItem(LAST_LOGIN_FP_KEY) || "";
+      if (curr && curr !== prev) {
+        sessionStorage.removeItem(POP_KEY);              // اسمحي بإظهاره لجلسة الدخول الجديدة
+        sessionStorage.setItem(LAST_LOGIN_FP_KEY, curr); // خزّني البصمة الحالية
+      }
+    } catch {}
+
     recompute();
+
     const onStorage = (e) => {
-      if (!e || ["user", "profile", "account", "student", "level"].includes(e.key))
+      if (!e || ["user", "profile", "account", "student", "level", "token", "authToken"].includes(e.key))
         recompute();
     };
     const onFocus = () => recompute();
@@ -382,6 +414,12 @@ export default function HomeLanding() {
       clearInterval(id);
     };
   }, [recompute]);
+
+  // عند إغلاق البوب-أب نعلّم أنه عُرض لهذه الجلسة
+  const handleClosePopup = () => {
+    try { sessionStorage.setItem(POP_KEY, "1"); } catch {}
+    setShowPopup(false);
+  };
 
   return (
     <div className="student-home">
@@ -402,8 +440,8 @@ export default function HomeLanding() {
         <StudentNotificationsPanel />
       </section>
 
-      {/* البوب-أب: يظهر فقط إذا مافي Level */}
-      <LevelPromptModal open={showPopup} onClose={() => setShowPopup(false)} />
+      {/* البوب-أب: إذا ما فيه Level → يظهر مرّة لكل **جلسة دخول**. بعد Logout/Login يرجع يظهر */}
+      <LevelPromptModal open={showPopup} onClose={handleClosePopup} />
 
       <style>{`
         .student-home { background: #f8fbff; min-height: 100vh; }
