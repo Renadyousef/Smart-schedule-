@@ -118,7 +118,9 @@ const historyStyles = `
     align-items: center;
     justify-content: center;
     font-weight: 600;
-    font-size: 0.85rem;
+    font-size: 0.9rem;
+    border-radius: 6px;
+    padding: 8px 6px;
   }
 
   .room {
@@ -193,6 +195,40 @@ const historyStyles = `
   .history-meta-line {
     font-size: 0.82rem;
     color: #475569;
+  }
+
+  /* Responsive: allow horizontal scroll on small screens (like student schedule) */
+  @media (max-width: 768px) {
+    .table-fixed {
+      display: block;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    th,
+    td {
+      font-size: 0.75rem;
+      height: 55px;
+      padding: 2px;
+    }
+    .subject-box {
+      font-size: 0.75rem;
+      line-height: 1.1;
+      padding: 4px;
+    }
+    .room {
+      font-size: 0.65rem;
+    }
+  }
+
+  @media (max-width: 390px) {
+    .subject-box {
+      font-size: 0.7rem;
+    }
+    th,
+    td {
+      font-size: 0.7rem;
+      height: 50px;
+    }
   }
 
   @media (max-width: 991px) {
@@ -803,8 +839,6 @@ export default function ScheduleHistory() {
                                             className="subject-box mb-1"
                                             style={{
                                               backgroundColor: color,
-                                              borderRadius: "10px",
-                                              padding: "10px 8px",
                                               color: "#0b2339",
                                               boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.05)",
                                             }}

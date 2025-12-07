@@ -1091,7 +1091,17 @@ export default function GeneratedSchedule() {
       <style>{`
         .table-fixed { table-layout: fixed; width: 100%; border-collapse: separate; border-spacing: 5px; }
         th, td { text-align: center; vertical-align: middle; height: 70px; border: 1px solid #dee2e6; border-radius: 10px; padding: 0; overflow: hidden; }
-        .subject-box { width: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; font-weight: 600; font-size: 0.85rem; }
+        .subject-box {
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          font-weight: 600;
+          font-size: 0.9rem;
+          border-radius: 6px;
+          padding: 8px 6px;
+        }
         .room { font-size: 0.75rem; color: #333; }
         .legend-box { display: inline-flex; align-items: center; margin: 0 10px; }
         .legend-color { width: 18px; height: 18px; border-radius: 4px; margin-right: 6px; border: 1px solid #ccc; }
@@ -1101,6 +1111,18 @@ export default function GeneratedSchedule() {
         .schedule-tabs .nav-link:hover { background: #e1e8f5; color: #0b2339; box-shadow: inset 0 0 0 1px rgba(11,35,57,0.12); }
         .schedule-tabs .nav-link.active { background: linear-gradient(135deg, #1c7ed6 0%, #3a3ddb 60%, #6526ff 100%); color: #fff; box-shadow: 0 8px 18px rgba(41, 74, 155, 0.25); }
         .schedule-tabs .nav-link.active:hover { color: #fff; }
+
+        /* Match student schedule responsiveness: horizontal scroll on small screens */
+        @media (max-width: 768px) {
+          .table-fixed { display: block; overflow-x: auto; white-space: nowrap; }
+          th, td { font-size: 0.75rem; height: 55px; padding: 2px; }
+          .subject-box { font-size: 0.75rem; line-height: 1.1; padding: 4px; }
+          .room { font-size: 0.65rem; }
+        }
+        @media (max-width: 390px) {
+          .subject-box { font-size: 0.7rem; }
+          th, td { font-size: 0.7rem; height: 50px; }
+        }
       `}</style>
 
       <h2 className="text-center mb-2">Schedule</h2>
@@ -1179,8 +1201,6 @@ export default function GeneratedSchedule() {
                         className="subject-box mb-1"
                         style={{
                           backgroundColor: colorOf(entry.type),
-                          borderRadius: "10px",
-                          padding: "10px 8px",
                           color: "#0b2339",
                           boxShadow: "inset 0 0 0 1px rgba(0,0,0,0.05)",
                           opacity: entry.spanTotal > 1 && entry.spanPart > 1 ? 0.9 : 1,
