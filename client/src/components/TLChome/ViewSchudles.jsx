@@ -154,19 +154,23 @@ export default function ViewSchedules() {
         <style>{`
           .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; margin-bottom:40px;}
           th, td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden;  padding: 0;  /* remove padding so child can fill */ }
-       .subject-box {
-  display: table-cell;
-  vertical-align: middle;
+         .subject-box {
   width: 100%;
   height: 100%;
-  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
   font-weight: 600;
   font-size: .9rem;
-  border-radius: 10px;
-  padding: 0 4px;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
+  margin: 0;
+  padding: 0;
   box-sizing: border-box;
-}
 
+}
 
           .room { font-size:.75rem; color:#333; }
           .btn-feedback { background-color:#e9f2ff; border:none; border-radius:30px; padding:14px 40px; font-weight:700; font-size:1.05rem; color:#0b3a67; }
