@@ -167,10 +167,10 @@ export default function ViewSchedules() {
       
 .subject-box {
   position: absolute; /* fill entire td */
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 2px;
+  left: 2px;
+  right: 2px;
+  bottom: 2px;
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -179,6 +179,8 @@ export default function ViewSchedules() {
   font-size: .9rem;
   text-align: center;
   box-sizing: border-box;
+  padding: 4px; /* extra inner padding */
+
 }
 
           .room { font-size:.75rem; color:#333; }
