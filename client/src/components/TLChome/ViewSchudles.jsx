@@ -267,6 +267,7 @@ export default function ViewSchedules() {
             });
 
             return (
+                <div className="table-responsive" key={group.meta?.groupNo || 1}>
               <table className="table-fixed" key={group.meta?.groupNo || 1}>
                 <thead>
                   <tr>
@@ -330,6 +331,7 @@ export default function ViewSchedules() {
                   ))}
                 </tbody>
               </table>
+              </div>
             );
           })}
 
