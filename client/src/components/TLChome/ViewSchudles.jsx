@@ -154,8 +154,26 @@ export default function ViewSchedules() {
         <style>{`
           .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; margin-bottom:40px;}
           th, td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden;  padding: 0;  /* remove padding so child can fill */ }
-          .subject-box { width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; font-weight:600; font-size:.9rem; white-space:normal; word-break:break-word; text-align:center;   margin: 0;   padding: 0;         /* remove padding */
-  box-sizing: border-box; /* include border in size */ }
+         .subject-box {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  font-size: .9rem;
+  white-space: normal;
+  word-break: break-word;
+  text-align: center;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+
+  /* add same rounded corners as td */
+  border-radius: 10px;
+}
+
           .room { font-size:.75rem; color:#333; }
           .btn-feedback { background-color:#e9f2ff; border:none; border-radius:30px; padding:14px 40px; font-weight:700; font-size:1.05rem; color:#0b3a67; }
           .btn-feedback:hover { background-color:#cce5ff; }
