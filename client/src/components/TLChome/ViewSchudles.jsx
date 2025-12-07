@@ -267,72 +267,61 @@ export default function ViewSchedules() {
             });
 
             return (
-                <div className="table-responsive" key={group.meta?.groupNo || 1}>
-              <table className="table table-fixed">
-                <thead>
-                  <tr>
-                    <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>
-                      Time
-                    </th>
-                    {DAYS.map((d) => (
-                      <th key={d} style={{ backgroundColor: "#f1f3f5" }}>
-                        {d}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {TIMES.map((time, ti) => (
-                    <tr key={time}>
-                      <td
-                        className="fw-bold"
-                        style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}
-                      >
-                        {time}
-                      </td>
-                      {DAYS.map((day) => {
-                        const key = `${day}#${ti}`;
-                        if (skip[key]) return null;
-                        const slot = grid?.[day]?.[time];
-                        if (!slot) return <td key={day}></td>;
+  <div className="table-responsive" key={group.meta?.groupNo || 1}>
+    <table className="table-fixed">
+      <thead>
+        <tr>
+          <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
+          {DAYS.map((d) => (
+            <th key={d} style={{ backgroundColor: "#f1f3f5" }}>{d}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {TIMES.map((time, ti) => (
+          <tr key={time}>
+            <td className="fw-bold" style={{ backgroundColor: "#f9fafb", fontSize: "0.9rem" }}>{time}</td>
+            {DAYS.map((day) => {
+              const key = `${day}#${ti}`;
+              if (skip[key]) return null;
+              const slot = grid?.[day]?.[time];
+              if (!slot) return <td key={day}></td>;
 
-                        // ======= Applied external course coloring logic =======
-                        let displayType = slot.type;
-                        if (slot.is_external) {
-                          const baseSection = Math.min(
-                            ...group.slots
-                              .filter(s => s.course_name === slot.subject && s.is_external)
-                              .map(s => s.section_number || 1)
-                          );
-                          const diff = (slot.section_number || 1) - baseSection;
-                          if (diff === 0) displayType = "core";
-                          else if (diff === 1) displayType = "tutorial";
-                          else displayType = "lab";
-                        }
-                        const bg = colorOf(displayType);
-                        // ========================================================
+              // ======= Applied external course coloring logic =======
+              let displayType = slot.type;
+              if (slot.is_external) {
+                const baseSection = Math.min(
+                  ...group.slots
+                    .filter(s => s.course_name === slot.subject && s.is_external)
+                    .map(s => s.section_number || 1)
+                );
+                const diff = (slot.section_number || 1) - baseSection;
+                if (diff === 0) displayType = "core";
+                else if (diff === 1) displayType = "tutorial";
+                else displayType = "lab";
+              }
+              const bg = colorOf(displayType);
+              // ========================================================
 
-                        const rowSpan = Math.max(1, slot.duration || 1);
-                        for (let k = 1; k < rowSpan; k++) skip[`${day}#${ti + k}`] = true;
+              const rowSpan = Math.max(1, slot.duration || 1);
+              for (let k = 1; k < rowSpan; k++) skip[`${day}#${ti + k}`] = true;
 
-                        return (
-                          <td key={day} rowSpan={rowSpan}>
-                            <div
-                              className="subject-box text-wrap"
-                              style={{ backgroundColor: bg }}
-                            >
-                              {slot.subject}
-                              <div className="room">Room {slot.room}</div>
-                            </div>
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-              </div>
-            );
+              return (
+                <td key={day} rowSpan={rowSpan}>
+                  <div className="subject-box text-wrap" style={{ backgroundColor: bg }}>
+                    {slot.subject}
+                    <div className="room">Room {slot.room}</div>
+                  </div>
+                </td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+);
+
           })}
 
         {/* Legend & Feedback */}
