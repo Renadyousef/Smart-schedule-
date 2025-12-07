@@ -153,7 +153,7 @@ export default function ViewSchedules() {
       <div className="container my-4 flex-grow-1">
         <style>{`
           .table-fixed { table-layout:fixed; width:100%; border-collapse:separate; border-spacing:5px; margin-bottom:40px;}
-          th, td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden; }
+          th, td { text-align:center; vertical-align:middle; height:70px; border:1px solid #dee2e6; border-radius:10px; padding:0; overflow:hidden;  /* Ensure the td acts like a flex container for its content */  display: flex; align-items: stretch;  /* stretch children vertically */ justify-content: stretch; /* stretch children horizontally */ }
        .subject-box {
   display: flex;
   flex-direction: column;
