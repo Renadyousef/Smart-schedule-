@@ -268,7 +268,7 @@ export default function ViewSchedules() {
 
             return (
   <div className="table-responsive" key={group.meta?.groupNo || 1}>
-    <table className="table-fixed">
+    <table className="table table-bordered" style={{ minWidth: "900px" }}>
       <thead>
         <tr>
           <th style={{ width: "140px", backgroundColor: "#f1f3f5" }}>Time</th>
